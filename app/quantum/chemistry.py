@@ -164,8 +164,16 @@ def create_hamiltonian(molecule: Molecule) -> HamiltonianBundle:
     ``n_core_orbitals`` / ``n_active_orbitals`` ergonomic representation into
     that pair: each frozen (closed-shell) core orbital removes 2 electrons
     from the active space.
+
+    We also temporarily chdir to a writable directory while invoking
+    ``create_molecular_hamiltonian`` because openfermion's
+    ``MolecularData.save()`` writes a temporary ``<uuid>.hdf5`` to the current
+    working directory before atomically renaming it to ``DATA_DIRECTORY``. In
+    our container the WORKDIR is ``/app`` and the runtime user is ``cudaq``
+    (uid 10001), so the temp write fails with ``PermissionError`` even though
+    ``DATA_DIRECTORY`` itself is writable.
     """
-    ensure_openfermion_data_dir_writable()
+    data_dir = ensure_openfermion_data_dir_writable()
 
     import cudaq
 
@@ -179,13 +187,23 @@ def create_hamiltonian(molecule: Molecule) -> HamiltonianBundle:
         kwargs["n_active_electrons"] = total_e - 2 * ncore
         kwargs["n_active_orbitals"] = nactive
 
-    hamiltonian, data = cudaq.chemistry.create_molecular_hamiltonian(
-        geometry_list,
-        molecule.basis,
-        molecule.multiplicity,
-        molecule.charge,
-        **kwargs,
-    )
+    prev_cwd = os.getcwd()
+    target_cwd = data_dir if data_dir and os.access(data_dir, os.W_OK) else None
+    if target_cwd is None and not os.access(prev_cwd, os.W_OK):
+        target_cwd = tempfile.gettempdir()
+    if target_cwd is not None:
+        os.chdir(target_cwd)
+    try:
+        hamiltonian, data = cudaq.chemistry.create_molecular_hamiltonian(
+            geometry_list,
+            molecule.basis,
+            molecule.multiplicity,
+            molecule.charge,
+            **kwargs,
+        )
+    finally:
+        if target_cwd is not None:
+            os.chdir(prev_cwd)
 
     n_electrons = int(data.n_electrons)
     n_orbitals = int(data.n_orbitals)

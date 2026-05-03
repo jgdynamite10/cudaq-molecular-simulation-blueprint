@@ -87,6 +87,20 @@ def test_summarize_run_computes_per_eval_time() -> None:
     assert metrics.target_string == "qpp-cpu"
 
 
+def test_default_blog_suite_uses_bumped_lih_iterations() -> None:
+    from app.benchmark.runner import default_blog_suite
+
+    suite = default_blog_suite(seeds=(42, 43, 44))
+    h2_specs = [s for s in suite if s.experiment == "h2"]
+    lih_specs = [s for s in suite if s.experiment == "lih"]
+    assert len(h2_specs) == 9, "3 seeds x 3 backends for H2"
+    assert len(lih_specs) == 6, "3 seeds x 2 backends for LiH"
+    assert all(s.max_iterations == 200 for s in h2_specs), "H2 budget unchanged"
+    assert all(s.max_iterations == 1500 for s in lih_specs), (
+        "LiH bumped from 300 (Phase 7e) to 1500 so COBYLA can converge to chemical accuracy"
+    )
+
+
 def test_compare_groups_by_molecule_and_backend() -> None:
     cpu_manifest, cpu_trace = _make_manifest(
         run_id="r-cpu", backend=BackendIdentifier.CPU, target="qpp-cpu", wall_time=4.0, n_iter=40

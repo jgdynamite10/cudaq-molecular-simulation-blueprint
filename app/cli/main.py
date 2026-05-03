@@ -6,6 +6,7 @@ Subcommands:
 - ``run lih``     Run an LiH VQE experiment.
 - ``results list``     List previous runs.
 - ``results show <id>`` Print a manifest.
+- ``bench run-suite``  Run the full multi-seed benchmark suite.
 - ``bench compare``    Generate a CPU vs GPU comparison report.
 - ``info``        Print system + GPU detection summary.
 """
@@ -193,6 +194,78 @@ def results_show(run_id: str = typer.Argument(...)) -> None:
     manifest = load_manifest(run_id)
     trace = load_trace(run_id)
     _summarize(manifest, trace)
+
+
+@bench_app.command("run-suite")
+def bench_run_suite(
+    seeds: str = typer.Option(
+        "42,43,44",
+        "--seeds",
+        help="Comma-separated seed list (e.g. '42,43,44').",
+    ),
+    h2_max_iterations: int = typer.Option(
+        200, "--h2-max-iterations", help="COBYLA max iterations for H2."
+    ),
+    lih_max_iterations: int = typer.Option(
+        1500,
+        "--lih-max-iterations",
+        help="COBYLA max iterations for LiH (300 was the v0.1.0 cap; 1500 lets it converge).",
+    ),
+    skip_gpu: bool = typer.Option(
+        False, "--skip-gpu", help="Skip GPU backends (e.g. for CPU-only smoke tests)."
+    ),
+) -> None:
+    """Run the full multi-seed benchmark suite end-to-end.
+
+    Defaults reproduce the post-v0.1.0 publication suite (3 seeds, LiH max
+    iterations bumped from 300 to 1500 so the optimizer can reach chemical
+    accuracy). Each spec is persisted as a regular run manifest + trace, so
+    the standard ``cudaq-bp results list`` and ``cudaq-bp bench compare``
+    commands continue to work afterwards.
+    """
+    from app.benchmark.runner import default_blog_suite, run_benchmark_suite
+
+    seed_tuple = tuple(int(s.strip()) for s in seeds.split(",") if s.strip())
+    if not seed_tuple:
+        raise typer.BadParameter("--seeds must contain at least one integer")
+
+    suite = default_blog_suite(
+        seeds=seed_tuple,
+        h2_max_iterations=h2_max_iterations,
+        lih_max_iterations=lih_max_iterations,
+    )
+    if skip_gpu:
+        suite = [s for s in suite if s.backend == BackendIdentifier.CPU]
+
+    console.print(
+        Panel.fit(
+            f"Running {len(suite)} bench specs across {len(seed_tuple)} seed(s).\n"
+            f"  seeds: {seed_tuple}\n"
+            f"  H2  max_iterations: {h2_max_iterations}\n"
+            f"  LiH max_iterations: {lih_max_iterations}\n"
+            f"  skip_gpu: {skip_gpu}",
+            title="bench run-suite",
+            border_style="cyan",
+        )
+    )
+    manifests = run_benchmark_suite(suite)
+    console.print(f"\n[green]Done.[/green] Persisted {len(manifests)} runs.")
+    table = Table(title="Suite summary")
+    table.add_column("molecule")
+    table.add_column("backend")
+    table.add_column("seed", justify="right")
+    table.add_column("status")
+    table.add_column("energy", justify="right")
+    table.add_column("iters", justify="right")
+    table.add_column("wall (s)", justify="right")
+    for m in manifests:
+        e = f"{m.result.energy:.4f}" if m.result else "-"
+        it = str(m.result.iterations) if m.result else "-"
+        wt = f"{m.result.wall_time_seconds:.2f}" if m.result else "-"
+        table.add_row(
+            m.molecule.name.value, m.backend.value, str(m.seed), m.status.value, e, it, wt
+        )
+    console.print(table)
 
 
 @bench_app.command("compare")

@@ -30,7 +30,7 @@ this project is for.
 | optimizer           | COBYLA (SciPy)                         | gradient-free, exposes a real per-eval trace        |
 | convergence test    | `\|E_VQE - E_FCI\| < 1.6e-3 Ha`         | chemical accuracy threshold                         |
 | RNG seed            | configurable (default 42)              | stamped into every manifest for reproducibility     |
-| seeds per backend   | 5 (default in `default_blog_suite`)    | mean +/- standard error in the comparison           |
+| seeds per backend   | 3 (default in `default_blog_suite`; H2 budget 200 iter, LiH 1500 iter) | mean +/- standard error in the comparison; LiH was bumped from 300 to 1500 after the v0.1.0 trace inspection showed COBYLA was still descending steadily at iter 300 |
 
 ## What is measured
 

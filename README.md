@@ -11,9 +11,15 @@
 
 **Live UI demo (Akamai Object Storage):**
 **<https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/>**
-- pre-rendered snapshot of the FastAPI/HTMX UI
-- shows the actual Jakarta Blackwell run as the host fingerprint
-- the "Run an experiment" form is intentionally inert (clone the repo to run live)
+
+[![Home page screenshot](docs/images/01-home.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/)
+
+The live demo is a pre-rendered snapshot of the FastAPI/HTMX UI hosted from
+an Akamai Object Storage bucket. It shows the actual Jakarta Blackwell host
+fingerprint (RTX PRO 6000 Blackwell, driver 580.159.03, CUDA 13.0, 96 GB
+VRAM) and embeds the real run manifests, traces, and comparison report
+inline. The "Run an experiment" form is intentionally inert in static mode
+&mdash; clone the repo to run live.
 
 This project supports the technical blog post **"Why GPUs Matter to Quantum
 Before QPUs Do: Using CUDA-Q, cuQuantum, and Blackwell GPUs for Molecular
@@ -49,9 +55,19 @@ Two stories the data tells:
   Identical convergence trajectory, 39% wall-time saving on the same 300
   COBYLA iterations. This is where the GPU starts paying its own freight.
 
-Raw artifacts (manifests, traces, comparison report) are bundled with each
-release. See [docs/results-interpretation.md](docs/results-interpretation.md)
-for the methodology and full discussion.
+[![CPU vs GPU comparison page](docs/images/02-compare.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/compare/)
+
+Each run is fully drillable. The screenshot below is the LiH GPU run on the
+Blackwell card &mdash; energy descent over 300 function evaluations, dashed
+orange line at the FCI reference, manifest and host fingerprint inline:
+
+[![LiH GPU run detail](docs/images/03-result-lih-gpu.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/results/20260503T162302Z-57cbd7/)
+
+Raw artifacts (manifests, traces, comparison report) are attached to the
+GitHub Release as `akamai-jakarta-results-v0.1.0.tgz` (with SHA256 in
+`akamai-jakarta-results-v0.1.0.sha256`). See
+[docs/results-interpretation.md](docs/results-interpretation.md) for the
+methodology and full discussion.
 
 ---
 

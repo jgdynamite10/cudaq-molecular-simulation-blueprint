@@ -1,0 +1,65 @@
+---
+# Install the NVIDIA OPEN kernel modules. Targets Ubuntu 22.04 LTS.
+#
+# Blackwell (RTX PRO 6000, RTX 50 series) requires open kernel modules;
+# the proprietary nvidia-driver-* packages do not support these GPUs.
+# We install the open driver only - the CUDA toolkit/runtime lives inside
+# the application container (nvidia/cuda:12.6 base), not on the host.
+
+- name: Install build dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - dkms
+      - gnupg
+      - ca-certificates
+      - curl
+      - lsb-release
+      - "linux-headers-{{ ansible_kernel }}"
+    state: present
+    update_cache: true
+
+- name: Add NVIDIA CUDA keyring
+  ansible.builtin.get_url:
+    url: "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb"
+    dest: /tmp/cuda-keyring.deb
+    mode: "0644"
+    timeout: 60
+
+- name: Install NVIDIA CUDA keyring
+  ansible.builtin.apt:
+    deb: /tmp/cuda-keyring.deb
+    state: present
+
+- name: Update apt cache after adding NVIDIA repo
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install NVIDIA open kernel modules (Blackwell-compatible)
+  ansible.builtin.apt:
+    name:
+      - "nvidia-open-{{ nvidia_driver_branch }}"
+    state: present
+
+- name: Mark whether reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required
+
+- name: Reboot to load NVIDIA driver
+  ansible.builtin.reboot:
+    msg: "Reboot to activate NVIDIA driver"
+    pre_reboot_delay: 5
+    post_reboot_delay: 30
+    reboot_timeout: 300
+  when: reboot_required.stat.exists
+
+- name: Verify nvidia-smi reports a GPU
+  ansible.builtin.command: nvidia-smi -L
+  register: nvidia_smi
+  changed_when: false
+  failed_when: nvidia_smi.rc != 0 or 'GPU' not in nvidia_smi.stdout
+
+- name: Show detected GPUs
+  ansible.builtin.debug:
+    msg: "{{ nvidia_smi.stdout_lines }}"

@@ -1,0 +1,78 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install docs dependencies
+        run: uv sync --extra docs
+
+      - name: Build docs site
+        run: |
+          if [ ! -f mkdocs.yml ]; then
+            echo "mkdocs.yml not present yet; emitting a minimal one for first run."
+            cat > mkdocs.yml <<EOF
+          site_name: cudaq-molecular-simulation-blueprint
+          docs_dir: docs
+          theme:
+            name: material
+            palette:
+              - scheme: slate
+                primary: cyan
+                accent: deep purple
+            features:
+              - navigation.tabs
+              - content.code.copy
+          markdown_extensions:
+            - admonition
+            - pymdownx.superfences:
+                custom_fences:
+                  - name: mermaid
+                    class: mermaid
+                    format: !!python/name:mermaid2.fence_mermaid_custom
+          plugins:
+            - search
+            - mermaid2
+          EOF
+          fi
+          uv run mkdocs build --strict --site-dir _site
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

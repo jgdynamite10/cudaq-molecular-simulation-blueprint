@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Run &middot; cudaq molecular simulation blueprint{% endblock %}
+{% block content %}
+<section class="grid gap-8 lg:grid-cols-5">
+  <form id="run-form" class="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-5">
+    <h1 class="text-xl font-semibold">Run an experiment</h1>
+
+    <div>
+      <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Molecule</label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="cursor-pointer rounded-lg border border-slate-700 hover:bg-slate-800 px-4 py-3">
+          <input type="radio" name="molecule" value="h2" class="hidden peer" checked />
+          <span class="peer-checked:text-brand-400 peer-checked:font-semibold">H<sub>2</sub></span>
+          <p class="text-xs text-slate-400">4 qubits, ~3 parameters</p>
+        </label>
+        <label class="cursor-pointer rounded-lg border border-slate-700 hover:bg-slate-800 px-4 py-3">
+          <input type="radio" name="molecule" value="lih" class="hidden peer" />
+          <span class="peer-checked:text-accent-400 peer-checked:font-semibold">LiH</span>
+          <p class="text-xs text-slate-400">10 qubits (2e/5o), ~24 parameters</p>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Backend</label>
+      <select name="backend" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2">
+        <option value="cpu">CPU (qpp-cpu, OpenMP)</option>
+        <option value="gpu_fp32" {% if not has_gpu %}disabled{% endif %}>GPU FP32 (nvidia / cuStateVec)</option>
+        <option value="gpu_fp64" {% if not has_gpu %}disabled{% endif %} selected>GPU FP64 (nvidia-fp64 / cuStateVec)</option>
+      </select>
+      {% if not has_gpu %}<p class="text-xs text-amber-400 mt-1">No NVIDIA GPU detected. GPU options disabled.</p>{% endif %}
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Bond distance (&Aring;)</label>
+        <input type="number" step="0.01" name="bond_distance" placeholder="auto" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Max iterations</label>
+        <input type="number" name="max_iterations" value="200" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Seed</label>
+        <input type="number" name="seed" value="42" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
+      </div>
+    </div>
+
+    <button type="submit" class="w-full rounded-lg bg-gradient-to-r from-brand-500 to-accent-500 hover:from-brand-400 hover:to-accent-400 text-slate-950 font-semibold py-2.5 transition">
+      Start run
+    </button>
+  </form>
+
+  <div class="lg:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6 min-h-[500px]">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold">Convergence</h2>
+      <span id="run-status" class="text-xs uppercase tracking-widest text-slate-500">idle</span>
+    </div>
+    <div id="energy-plot" class="mt-4 h-[420px]"></div>
+    <div id="run-summary" class="mt-4 text-sm text-slate-400"></div>
+  </div>
+</section>
+
+<script>
+(function() {
+  const form = document.getElementById("run-form");
+  const status = document.getElementById("run-status");
+  const summary = document.getElementById("run-summary");
+  const plotEl = document.getElementById("energy-plot");
+
+  function plot(records) {
+    Plotly.react(plotEl, [{
+      x: records.map(r => r.iteration),
+      y: records.map(r => r.energy),
+      mode: "lines+markers",
+      line: { color: "#22d3ee", width: 2 },
+      marker: { color: "#a78bfa", size: 6 },
+      name: "energy"
+    }], {
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { color: "#cbd5e1" },
+      xaxis: { title: "function evaluation", gridcolor: "#1f2937", zerolinecolor: "#1f2937" },
+      yaxis: { title: "energy [Hartree]", gridcolor: "#1f2937", zerolinecolor: "#1f2937" },
+      margin: { l: 60, r: 20, t: 10, b: 50 },
+      showlegend: false
+    }, { displaylogo: false, responsive: true });
+  }
+
+  plot([]);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const molecule = fd.get("molecule");
+    const body = {
+      backend: fd.get("backend"),
+      max_iterations: parseInt(fd.get("max_iterations")) || 200,
+      seed: parseInt(fd.get("seed")) || 42
+    };
+    const bd = fd.get("bond_distance");
+    if (bd) body.bond_distance = parseFloat(bd);
+
+    status.textContent = "starting";
+    summary.innerHTML = "";
+    plot([]);
+
+    let resp;
+    try {
+      resp = await fetch(`/api/runs/${molecule}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    } catch (err) {
+      status.textContent = "error";
+      summary.textContent = String(err);
+      return;
+    }
+    if (!resp.ok) {
+      status.textContent = "error";
+      summary.textContent = await resp.text();
+      return;
+    }
+    const { run_id } = await resp.json();
+    status.textContent = "running";
+
+    const records = [];
+    const es = new EventSource(`/api/runs/${run_id}/stream`);
+    es.addEventListener("iteration", (ev) => {
+      const r = JSON.parse(ev.data);
+      records.push(r);
+      plot(records);
+      status.textContent = `running &middot; iter ${r.iteration} &middot; E = ${r.energy.toFixed(6)}`;
+    });
+    es.addEventListener("completed", async () => {
+      es.close();
+      try {
+        const m = await fetch(`/api/runs/${run_id}`).then(r => r.json());
+        const r = m.result;
+        const link = `<a class="text-brand-400 hover:underline" href="/results/${run_id}">view manifest &rarr;</a>`;
+        if (r) {
+          status.textContent = "completed";
+          summary.innerHTML = `
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-200">
+              <div><div class="text-slate-500 text-xs">final energy</div><div class="font-mono">${r.energy.toFixed(6)} Ha</div></div>
+              <div><div class="text-slate-500 text-xs">iterations</div><div class="font-mono">${r.iterations}</div></div>
+              <div><div class="text-slate-500 text-xs">wall time</div><div class="font-mono">${r.wall_time_seconds.toFixed(3)} s</div></div>
+              <div><div class="text-slate-500 text-xs">chemical accuracy</div><div class="font-mono">${r.chemical_accuracy_reached ? "yes" : "no"}</div></div>
+            </div>
+            <div class="mt-3">${link}</div>`;
+        } else {
+          status.textContent = "failed";
+          summary.innerHTML = `run did not produce a result. ${link}`;
+        }
+      } catch (err) {
+        status.textContent = "completed";
+        summary.textContent = String(err);
+      }
+    });
+    es.addEventListener("error", (ev) => {
+      console.error("SSE error", ev);
+    });
+  });
+})();
+</script>
+{% endblock %}

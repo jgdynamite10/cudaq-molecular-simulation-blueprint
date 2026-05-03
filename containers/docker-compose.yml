@@ -1,0 +1,55 @@
+# Compose file for cudaq-molecular-simulation-blueprint.
+#
+# Two services share the same image:
+#
+#   app      - default, CPU-only, can run on any laptop with Docker.
+#   app-gpu  - opt-in via the `gpu` profile; requires nvidia-container-toolkit
+#              and `--gpus all` semantics.
+#
+# Usage:
+#   docker compose -f containers/docker-compose.yml up app
+#   docker compose -f containers/docker-compose.yml --profile gpu up app-gpu
+
+name: cudaq-blueprint
+
+services:
+  app:
+    image: ${IMAGE:-cudaq-molecular-simulation-blueprint:dev}
+    build:
+      context: ..
+      dockerfile: containers/Dockerfile
+    environment:
+      CUDAQ_BP_LOG_LEVEL: ${CUDAQ_BP_LOG_LEVEL:-INFO}
+      CUDAQ_BP_DEFAULT_BACKEND: ${CUDAQ_BP_DEFAULT_BACKEND:-cpu}
+      CUDAQ_BP_RESULTS_DIR: /data/results
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    volumes:
+      - ../results:/data/results
+    restart: unless-stopped
+
+  app-gpu:
+    image: ${IMAGE:-cudaq-molecular-simulation-blueprint:dev}
+    build:
+      context: ..
+      dockerfile: containers/Dockerfile
+    environment:
+      CUDAQ_BP_LOG_LEVEL: ${CUDAQ_BP_LOG_LEVEL:-INFO}
+      CUDAQ_BP_DEFAULT_BACKEND: gpu_fp64
+      CUDAQ_BP_RESULTS_DIR: /data/results
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    volumes:
+      - ../results:/data/results
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - gpu

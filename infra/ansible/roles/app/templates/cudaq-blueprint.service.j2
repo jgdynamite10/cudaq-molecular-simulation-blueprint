@@ -1,0 +1,26 @@
+[Unit]
+Description=cudaq-molecular-simulation-blueprint app container
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+
+ExecStartPre=-/usr/bin/docker rm -f cudaq-blueprint
+ExecStart=/usr/bin/docker run --rm --name cudaq-blueprint \
+  --gpus all \
+  -e CUDAQ_BP_LOG_LEVEL=INFO \
+  -e CUDAQ_BP_DEFAULT_BACKEND=gpu_fp64 \
+  -e CUDAQ_BP_API_HOST=0.0.0.0 \
+  -e CUDAQ_BP_API_PORT={{ cudaq_app_port }} \
+  -p {{ cudaq_app_port }}:8000 \
+  -v {{ cudaq_results_dir }}:/data/results \
+  {{ cudaq_image }} api
+
+ExecStop=/usr/bin/docker stop cudaq-blueprint
+
+[Install]
+WantedBy=multi-user.target

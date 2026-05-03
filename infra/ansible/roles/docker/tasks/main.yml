@@ -1,0 +1,81 @@
+---
+# Install Docker CE and the NVIDIA Container Toolkit so containers can use --gpus all.
+
+- name: Ensure prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Add Docker GPG keyring
+  ansible.builtin.shell: |
+    set -euo pipefail
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  args:
+    executable: /bin/bash
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    filename: docker
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable"
+    state: present
+    update_cache: true
+
+- name: Install Docker CE + compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Add NVIDIA Container Toolkit repository keyring
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+      | gpg --dearmor -o /etc/apt/keyrings/nvidia-container-toolkit.gpg
+    curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+      | sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#g' \
+      | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  args:
+    executable: /bin/bash
+    creates: /etc/apt/keyrings/nvidia-container-toolkit.gpg
+
+- name: Install NVIDIA Container Toolkit
+  ansible.builtin.apt:
+    name:
+      - nvidia-container-toolkit
+    state: present
+    update_cache: true
+
+- name: Configure Docker to use the NVIDIA runtime
+  ansible.builtin.command: nvidia-ctk runtime configure --runtime=docker
+  args:
+    creates: /etc/docker/daemon.json
+
+- name: Restart docker after toolkit configuration
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+    enabled: true
+
+- name: Smoke test - run a CUDA container with --gpus all
+  ansible.builtin.command: >
+    docker run --rm --gpus all
+    nvidia/cuda:12.6.3-base-ubuntu22.04 nvidia-smi -L
+  register: docker_gpu_test
+  changed_when: false
+  failed_when: docker_gpu_test.rc != 0 or 'GPU' not in docker_gpu_test.stdout
+
+- name: Show docker GPU smoke test output
+  ansible.builtin.debug:
+    msg: "{{ docker_gpu_test.stdout_lines }}"

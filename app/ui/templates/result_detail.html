@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ manifest.run_id }} &middot; cudaq molecular simulation blueprint{% endblock %}
+{% block content %}
+<section class="space-y-8">
+  <div>
+    <a href="/results" class="text-sm text-slate-400 hover:text-white">&larr; back to results</a>
+    <h1 class="mt-2 text-2xl font-semibold font-mono">{{ manifest.run_id }}</h1>
+    <p class="text-slate-400 text-sm">{{ manifest.molecule.name.value | upper }} &middot; {{ manifest.target_string }} &middot; {{ manifest.qubit_count }} qubits &middot; {{ manifest.parameter_count }} parameters</p>
+  </div>
+
+  {% if manifest.result %}
+  <div class="grid gap-4 md:grid-cols-4">
+    {% set r = manifest.result %}
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-widest">energy</div>
+      <div class="mt-1 font-mono text-lg">{{ "%.6f"|format(r.energy) }} Ha</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-widest">reference</div>
+      <div class="mt-1 font-mono text-lg">{{ "%.6f"|format(r.reference_energy) if r.reference_energy is not none else "-" }} Ha</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-widest">error vs ref</div>
+      <div class="mt-1 font-mono text-lg">{{ "%+.2e"|format(r.error_vs_reference_hartree) if r.error_vs_reference_hartree is not none else "-" }} Ha</div>
+    </div>
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-widest">wall time</div>
+      <div class="mt-1 font-mono text-lg">{{ "%.3f"|format(r.wall_time_seconds) }} s</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <h2 class="text-xl font-semibold mb-3">Convergence</h2>
+    <div id="energy-plot" class="h-[420px]"></div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <h3 class="font-semibold mb-3">Manifest</h3>
+      <pre class="text-xs overflow-auto text-slate-300 max-h-[480px]">{{ manifest.model_dump_json(indent=2) }}</pre>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <h3 class="font-semibold mb-3">System info</h3>
+      <pre class="text-xs overflow-auto text-slate-300 max-h-[480px]">{{ manifest.system_info | tojson(indent=2) }}</pre>
+    </div>
+  </div>
+</section>
+
+<script>
+(function() {
+  const records = {{ trace_records | tojson }};
+  if (!records.length) return;
+  const refEnergy = {{ manifest.result.reference_energy if manifest.result and manifest.result.reference_energy is not none else "null" }};
+  const traces = [{
+    x: records.map(r => r.iteration),
+    y: records.map(r => r.energy),
+    mode: "lines+markers",
+    line: { color: "#22d3ee", width: 2 },
+    marker: { color: "#a78bfa", size: 5 },
+    name: "VQE energy"
+  }];
+  if (refEnergy !== null) {
+    traces.push({
+      x: [records[0].iteration, records[records.length-1].iteration],
+      y: [refEnergy, refEnergy],
+      mode: "lines",
+      line: { color: "#f59e0b", dash: "dash", width: 1.5 },
+      name: "reference"
+    });
+  }
+  Plotly.react("energy-plot", traces, {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#cbd5e1" },
+    xaxis: { title: "function evaluation", gridcolor: "#1f2937", zerolinecolor: "#1f2937" },
+    yaxis: { title: "energy [Hartree]", gridcolor: "#1f2937", zerolinecolor: "#1f2937" },
+    margin: { l: 60, r: 20, t: 10, b: 50 },
+    legend: { orientation: "h", y: -0.2 }
+  }, { displaylogo: false, responsive: true });
+})();
+</script>
+{% endblock %}

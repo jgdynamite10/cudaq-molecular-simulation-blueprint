@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}cudaq molecular simulation blueprint{% endblock %}</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50:  "#ecfeff",
+                100: "#cffafe",
+                300: "#67e8f9",
+                400: "#22d3ee",
+                500: "#06b6d4",
+                600: "#0891b2",
+                700: "#0e7490",
+              },
+              accent: {
+                400: "#a78bfa",
+                500: "#8b5cf6",
+                600: "#7c3aed",
+              }
+            }
+          }
+        }
+      };
+    </script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body class="h-full font-sans antialiased">
+    <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 grid place-items-center text-slate-900 font-black">Q</div>
+          <div class="leading-tight">
+            <div class="text-sm uppercase tracking-widest text-slate-400">cudaq</div>
+            <div class="font-semibold">molecular simulation blueprint</div>
+          </div>
+        </a>
+        <nav class="flex items-center gap-6 text-sm text-slate-300">
+          <a class="hover:text-white" href="/">Home</a>
+          <a class="hover:text-white" href="/run">Run</a>
+          <a class="hover:text-white" href="/results">Results</a>
+          <a class="hover:text-white" href="/compare">Compare</a>
+          <a class="hidden sm:inline-flex items-center gap-1 rounded-md border border-slate-700 px-3 py-1 text-slate-300 hover:bg-slate-800"
+             href="/docs" target="_blank">API <span aria-hidden>&#8599;</span></a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-10">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-slate-800 mt-20">
+      <div class="max-w-6xl mx-auto px-6 py-6 text-xs text-slate-500 flex justify-between">
+        <span>cudaq-molecular-simulation-blueprint &middot; portable hybrid quantum-classical reference</span>
+        <span>not a quantum advantage claim</span>
+      </div>
+    </footer>
+  </body>
+</html>

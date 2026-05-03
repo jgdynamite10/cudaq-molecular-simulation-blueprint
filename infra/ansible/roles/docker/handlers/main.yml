@@ -1,0 +1,2 @@
+---
+# docker role manages docker via ansible.builtin.service directly; no handlers.

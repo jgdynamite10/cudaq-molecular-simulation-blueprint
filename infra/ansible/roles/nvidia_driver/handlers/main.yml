@@ -1,0 +1,2 @@
+---
+# nvidia_driver role uses ansible.builtin.reboot directly; no handlers needed.

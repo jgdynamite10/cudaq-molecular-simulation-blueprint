@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+.uv/
+.python-version
+
+# Type checkers / linters / coverage
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Environment
+.env
+.env.local
+*.env
+
+# Results - keep directory but ignore generated artifacts.
+# Sample artifacts ship attached to GitHub Releases, not in the tree.
+results/*
+!results/.gitkeep
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+tfplan
+*.tfplan
+
+# Ansible
+*.retry
+infra/ansible/inventory.ini
+infra/ansible/*.vault
+
+# Docker
+.dockerignore.local
+
+# Logs / run records
+*.log
+logs/
+.runlogs/
+
+# Generated archives
+*.tgz
+*.tar.gz
+*.zip
+
+# Defensive: never let SSH keys get tracked
+*.pem
+id_rsa*
+id_ed25519*
+*-akamai
+*-akamai.pub
+
+# Internal handover documents - never publish
+PROJECT_STATUS.md
+HANDOVER.md
+.handover/

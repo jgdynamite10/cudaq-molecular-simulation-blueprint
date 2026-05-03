@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install Python via uv
+        run: uv python install 3.11
+
+      - name: uv sync (dev)
+        run: uv sync --extra dev
+
+      - name: ruff check
+        run: uv run ruff check app
+
+      - name: ruff format check
+        run: uv run ruff format --check app
+
+      - name: pytest (CPU-only, exclude slow)
+        run: uv run pytest -m "not gpu and not slow" --cov=app --cov-report=xml
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  docker-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build container image (smoke)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/Dockerfile
+          push: false
+          load: true
+          tags: cudaq-molecular-simulation-blueprint:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  terraform-validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.7
+      - name: terraform fmt
+        working-directory: infra/terraform/akamai
+        run: terraform fmt -check -recursive
+      - name: terraform init (backend false)
+        working-directory: infra/terraform/akamai
+        run: terraform init -backend=false -input=false
+      - name: terraform validate
+        working-directory: infra/terraform/akamai
+        run: terraform validate

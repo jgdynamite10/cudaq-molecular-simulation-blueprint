@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Results &middot; cudaq molecular simulation blueprint{% endblock %}
+{% block content %}
+<section>
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold">Past runs</h1>
+    <span class="text-sm text-slate-400">{{ runs|length }} run{{ runs|length != 1 and "s" or "" }}</span>
+  </div>
+
+  {% if not runs %}
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center">
+      <p class="text-slate-400">No runs yet. <a class="text-brand-400 hover:underline" href="/run">Start one &rarr;</a></p>
+    </div>
+  {% else %}
+    <div class="overflow-hidden rounded-2xl border border-slate-800">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-900/80 text-slate-400 uppercase text-xs tracking-widest">
+          <tr>
+            <th class="px-4 py-3 text-left">run id</th>
+            <th class="px-4 py-3 text-left">molecule</th>
+            <th class="px-4 py-3 text-left">backend</th>
+            <th class="px-4 py-3 text-right">energy [Ha]</th>
+            <th class="px-4 py-3 text-right">iters</th>
+            <th class="px-4 py-3 text-right">wall (s)</th>
+            <th class="px-4 py-3 text-right">err vs ref</th>
+            <th class="px-4 py-3 text-left">status</th>
+          </tr>
+        </thead>
+        <tbody class="bg-slate-900 divide-y divide-slate-800">
+        {% for m in runs %}
+          {% set r = m.result %}
+          <tr class="hover:bg-slate-800/60">
+            <td class="px-4 py-3"><a class="font-mono text-brand-400 hover:underline" href="/results/{{ m.run_id }}">{{ m.run_id }}</a></td>
+            <td class="px-4 py-3">{{ m.molecule.name.value | upper }}</td>
+            <td class="px-4 py-3"><span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-xs">{{ m.target_string }}</span></td>
+            <td class="px-4 py-3 text-right font-mono">{{ "%.6f"|format(r.energy) if r else "-" }}</td>
+            <td class="px-4 py-3 text-right font-mono">{{ r.iterations if r else "-" }}</td>
+            <td class="px-4 py-3 text-right font-mono">{{ "%.3f"|format(r.wall_time_seconds) if r else "-" }}</td>
+            <td class="px-4 py-3 text-right font-mono">{{ "%+.2e"|format(r.error_vs_reference_hartree) if r and r.error_vs_reference_hartree is not none else "-" }}</td>
+            <td class="px-4 py-3">
+              {% if m.status.value == "completed" %}<span class="rounded bg-emerald-900/40 text-emerald-300 px-2 py-0.5 text-xs">completed</span>
+              {% elif m.status.value == "failed" %}<span class="rounded bg-rose-900/40 text-rose-300 px-2 py-0.5 text-xs">failed</span>
+              {% else %}<span class="rounded bg-amber-900/40 text-amber-300 px-2 py-0.5 text-xs">{{ m.status.value }}</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

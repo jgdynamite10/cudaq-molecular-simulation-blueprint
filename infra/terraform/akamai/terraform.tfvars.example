@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars (gitignored) and customize.
+#
+# The LINODE_TOKEN is NOT set here - export it in your shell instead:
+#   export LINODE_TOKEN=<your-pat>
+# The linode/linode provider picks it up automatically.
+
+label         = "cudaq-blueprint-blackwell"
+region        = "id-cgk"                          # Jakarta - confirmed Blackwell stock
+instance_type = "g3-gpu-rtxpro6000-blackwell-1"   # 1x RTX PRO 6000 Blackwell
+
+ssh_authorized_keys = [
+  "ssh-ed25519 AAAA... you@host"
+]
+
+# Lock the firewall down to your egress IP if you can. Defaults are open.
+# firewall_allowed_ssh_cidrs = ["198.51.100.7/32"]
+# firewall_allowed_app_cidrs = ["198.51.100.7/32"]

@@ -1,0 +1,50 @@
+---
+- name: Bootstrap an Akamai Blackwell host for cudaq-molecular-simulation-blueprint
+  hosts: blackwell
+  gather_facts: true
+  become: true
+
+  vars:
+    # Image strategy for v1 (decision: 2026-05-01, Path 1 - see HANDOVER.md):
+    # The VM builds the image from synced source. After v0.1.0 tag, the
+    # release workflow publishes ghcr.io/<owner>/cudaq-molecular-simulation-blueprint:<tag>
+    # for public reproduction. Until then, cudaq_image is a local tag only.
+    cudaq_image: "cudaq-blueprint:local"
+    cudaq_source_dir: "/opt/cudaq-blueprint"
+    cudaq_app_port: 8000
+    cudaq_results_dir: "/var/lib/cudaq-blueprint/results"
+    # Branch 580 is the current NVIDIA Long-Term Support Branch (LTSB).
+    # Required for Blackwell (RTX PRO 6000, RTX 50 series): branch >= 565,
+    # and OPEN kernel modules only (nvidia-open-580, not nvidia-driver-580).
+    nvidia_driver_branch: "580"
+
+  pre_tasks:
+    - name: Ensure apt cache is fresh
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Wait for cloud-init to finish
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      failed_when: false
+
+  roles:
+    - role: nvidia_driver
+      tags: [drivers]
+    - role: docker
+      tags: [docker]
+    - role: app
+      tags: [app]
+
+  post_tasks:
+    - name: Confirm app health
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ cudaq_app_port }}/health"
+        status_code: 200
+      register: app_health
+      retries: 30
+      delay: 5
+      until: app_health.status == 200
+      delegate_to: localhost
+      become: false

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Compare &middot; cudaq molecular simulation blueprint{% endblock %}
+{% block content %}
+<section class="space-y-8">
+  <div>
+    <h1 class="text-2xl font-semibold">CPU vs GPU comparison</h1>
+    <p class="text-slate-400 text-sm mt-1">
+      Aggregated across {{ report.totals.total_runs or 0 }} runs in <code class="text-xs">results/</code>.
+      Per-backend mean &plusmn; standard error.
+    </p>
+  </div>
+
+  {% if not report.by_molecule %}
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center">
+      <p class="text-slate-400">No comparable runs yet. Run the same experiment on multiple backends and seeds to populate this view.</p>
+    </div>
+  {% else %}
+    {% for molecule, data in report.by_molecule.items() %}
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-6">
+      <div class="flex items-baseline justify-between">
+        <h2 class="text-xl font-semibold">{{ molecule | upper }}</h2>
+        <div class="text-sm text-slate-400 space-x-3">
+          {% for k, v in data.speedups.items() %}
+          <span class="rounded bg-emerald-900/40 text-emerald-300 px-2 py-0.5 font-mono text-xs">{{ "%.2fx"|format(v) }} {{ k }}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div id="walltime-{{ molecule }}" class="h-[280px]"></div>
+        <div id="error-{{ molecule }}" class="h-[280px]"></div>
+      </div>
+
+      <table class="w-full text-sm">
+        <thead class="text-slate-400 uppercase text-xs tracking-widest">
+          <tr>
+            <th class="text-left px-3 py-2">backend</th>
+            <th class="text-right px-3 py-2">n</th>
+            <th class="text-right px-3 py-2">wall time (s)</th>
+            <th class="text-right px-3 py-2">time/eval (ms)</th>
+            <th class="text-right px-3 py-2">iterations</th>
+            <th class="text-right px-3 py-2">|err vs ref| (Ha)</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800">
+        {% for backend, stats in data.backends.items() %}
+          <tr>
+            <td class="px-3 py-2 font-mono">{{ backend }}</td>
+            <td class="px-3 py-2 text-right font-mono">{{ stats.n }}</td>
+            <td class="px-3 py-2 text-right font-mono">{{ "%.3f"|format(stats.wall_time_seconds.mean) }} &plusmn; {{ "%.3f"|format(stats.wall_time_seconds.stderr) }}</td>
+            <td class="px-3 py-2 text-right font-mono">{{ "%.2f"|format(stats.time_per_evaluation_ms.mean) }} &plusmn; {{ "%.2f"|format(stats.time_per_evaluation_ms.stderr) }}</td>
+            <td class="px-3 py-2 text-right font-mono">{{ "%.1f"|format(stats.iterations.mean) }} &plusmn; {{ "%.1f"|format(stats.iterations.stderr) }}</td>
+            <td class="px-3 py-2 text-right font-mono">{{ "%.2e"|format(stats.error_hartree.mean) if stats.error_hartree.mean is not none else "-" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  {% endif %}
+</section>
+
+<script>
+(function() {
+  const report = {{ report | tojson }};
+  const layoutBase = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#cbd5e1" },
+    xaxis: { gridcolor: "#1f2937", zerolinecolor: "#1f2937" },
+    yaxis: { gridcolor: "#1f2937", zerolinecolor: "#1f2937" },
+    margin: { l: 60, r: 20, t: 30, b: 50 },
+    showlegend: false,
+  };
+  const colors = { cpu: "#22d3ee", gpu_fp32: "#a78bfa", gpu_fp64: "#8b5cf6" };
+  for (const [mol, data] of Object.entries(report.by_molecule || {})) {
+    const backends = Object.keys(data.backends);
+    const walltimes = backends.map(b => data.backends[b].wall_time_seconds.mean);
+    const wallerr   = backends.map(b => data.backends[b].wall_time_seconds.stderr);
+    const errs      = backends.map(b => data.backends[b].error_hartree.mean);
+    Plotly.react("walltime-" + mol, [{
+      type: "bar", x: backends, y: walltimes,
+      error_y: { type: "data", array: wallerr, color: "#94a3b8" },
+      marker: { color: backends.map(b => colors[b] || "#06b6d4") },
+      hovertemplate: "%{x}<br>%{y:.3f} s<extra></extra>"
+    }], { ...layoutBase, title: { text: "wall time (s)", font: { size: 13, color: "#cbd5e1" } }, yaxis: { ...layoutBase.yaxis, title: "seconds" } }, { displaylogo: false, responsive: true });
+    Plotly.react("error-" + mol, [{
+      type: "bar", x: backends, y: errs,
+      marker: { color: backends.map(b => colors[b] || "#06b6d4") },
+      hovertemplate: "%{x}<br>%{y:.2e} Ha<extra></extra>"
+    }], { ...layoutBase, title: { text: "|error vs reference| (Ha)", font: { size: 13, color: "#cbd5e1" } }, yaxis: { ...layoutBase.yaxis, title: "Ha", type: "log" } }, { displaylogo: false, responsive: true });
+  }
+})();
+</script>
+{% endblock %}

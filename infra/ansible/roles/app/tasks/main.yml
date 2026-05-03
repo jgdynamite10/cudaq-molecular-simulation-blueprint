@@ -1,0 +1,109 @@
+---
+# Sync source from the Ansible controller (the user's Mac) to the VM, build
+# the application Docker image natively on the VM (Linux x86_64 with the
+# Blackwell GPU, where cudaq's Linux binary wheels resolve correctly), and
+# run it as a systemd-managed service.
+#
+# This is Path 1 (decided 2026-05-01): keep Phase 7 self-contained, no
+# GitHub/GHCR dependency. The release workflow publishes a pullable image
+# to GHCR when v0.1.0 is tagged - that is the public-reproduction path,
+# not this one.
+
+- name: Ensure results directory exists on VM
+  ansible.builtin.file:
+    path: "{{ cudaq_results_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure source directory exists on VM
+  ansible.builtin.file:
+    path: "{{ cudaq_source_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Package source on the controller
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd "{{ playbook_dir }}/../.."
+    tar \
+      --exclude='.git' \
+      --exclude='.venv' \
+      --exclude='__pycache__' \
+      --exclude='*.pyc' \
+      --exclude='.ruff_cache' \
+      --exclude='.pytest_cache' \
+      --exclude='.mypy_cache' \
+      --exclude='./results/[!.]*' \
+      --exclude='./results/blog/*.tmp' \
+      --exclude='HANDOVER.md' \
+      --exclude='PROJECT_STATUS.md' \
+      --exclude='./.handover' \
+      --exclude='./infra/terraform/akamai/.terraform' \
+      --exclude='./infra/terraform/akamai/.terraform.lock.hcl' \
+      --exclude='./infra/terraform/akamai/terraform.tfvars' \
+      --exclude='./infra/terraform/akamai/terraform.tfstate*' \
+      --exclude='./infra/terraform/akamai/tfplan' \
+      --exclude='./infra/terraform/akamai/inventory.ini' \
+      --exclude='./infra/ansible/inventory.ini' \
+      --exclude='./infra/ansible/*.retry' \
+      --exclude='.env' \
+      --exclude='.dockerignore.local' \
+      -czf /tmp/cudaq-blueprint-src.tar.gz .
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Extract source onto VM
+  ansible.builtin.unarchive:
+    src: /tmp/cudaq-blueprint-src.tar.gz
+    dest: "{{ cudaq_source_dir }}"
+    owner: root
+    group: root
+
+- name: Remove source tarball from controller
+  ansible.builtin.file:
+    path: /tmp/cudaq-blueprint-src.tar.gz
+    state: absent
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Build the application image on the VM
+  ansible.builtin.command:
+    cmd: docker build -t {{ cudaq_image }} -f containers/Dockerfile .
+    chdir: "{{ cudaq_source_dir }}"
+  register: docker_build
+  changed_when: "'writing image' in docker_build.stdout or 'Successfully built' in docker_build.stdout"
+
+- name: Render systemd unit
+  ansible.builtin.template:
+    src: cudaq-blueprint.service.j2
+    dest: /etc/systemd/system/cudaq-blueprint.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart cudaq-blueprint
+
+- name: Enable and start the service
+  ansible.builtin.systemd:
+    name: cudaq-blueprint
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for /health to respond
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ cudaq_app_port }}/health"
+    status_code: 200
+  register: health
+  retries: 30
+  delay: 5
+  until: health.status == 200

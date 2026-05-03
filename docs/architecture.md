@@ -52,16 +52,16 @@ flowchart LR
 `app/` is provider-agnostic. It does not import anything from `infra/` and
 has no awareness of Akamai. The only "deployment" knowledge inside `app/` is
 the `nvidia` vs `qpp-cpu` backend mapping in
-[`app/quantum/backends.py`](../app/quantum/backends.py), which is a CUDA-Q
+[`app/quantum/backends.py`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/blob/main/app/quantum/backends.py), which is a CUDA-Q
 concept, not an Akamai concept.
 
 `infra/` contains everything Akamai-specific:
 
-- [`infra/terraform/akamai/`](../infra/terraform/akamai/) - Terraform stack
+- [`infra/terraform/akamai/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/infra/terraform/akamai) - Terraform stack
   using the official `linode/linode` provider.
-- [`infra/ansible/`](../infra/ansible/) - Ansible playbook + roles that
+- [`infra/ansible/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/infra/ansible) - Ansible playbook + roles that
   install drivers, Docker, and the application container.
-- [`infra/k8s/future/`](../infra/k8s/future/) - placeholder; LKE is an
+- [`infra/k8s/future/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/infra/k8s/future) - placeholder; LKE is an
   explicit non-goal for v1.
 
 ## Hybrid pipeline

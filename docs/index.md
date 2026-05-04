@@ -11,23 +11,32 @@ QPUs Do: Using CUDA-Q, cuQuantum, and Blackwell GPUs for Molecular
 Simulation"** by making the hybrid quantum workflow concrete, runnable,
 and reproducible.
 
-## Validated on Blackwell (Jakarta, 2026-05-03)
+## Validated on Blackwell (Jakarta, multi-seed re-bench 2026-05-04)
 
-A `g3-gpu-rtxpro6000-blackwell-1` VM in Akamai's `id-cgk` region, NVIDIA
-driver `nvidia-open-580.159.03`, CUDA 13.0, 96 GB VRAM, 16 vCPU, 172 GB
-system RAM. VM lifetime 1 h 17 min, billed cost **$3.84**.
+A `g3-gpu-rtxpro6000-blackwell-1` VM in Akamai's `id-cgk` region. NVIDIA
+driver `nvidia-open-580.159.03` (`nvidia-smi` reports max-supported
+CUDA 13.0); container uses `cuda-quantum-cu13` wheels on top of the
+CUDA 12.6 base image. 96 GB VRAM, 16 vCPU, 172 GB system RAM. 15 specs
+total (3 RNG seeds per backend), 2 h 27 min of bench compute, ~3 h 35
+min total VM lifetime, ~$10.75 at the Jakarta regional rate of $3.00/hr.
 
-| Run | Backend | Qubits | Wall (s) | Energy (Ha) | Error vs FCI |
-|---|---|---:|---:|---:|---:|
-| H2  | `qpp-cpu`     |  4 | **17.07** | -1.137270 | -1.75e-07 |
-| H2  | `nvidia:fp64` |  4 |     19.19 | -1.137270 | -1.75e-07 |
-| LiH | `qpp-cpu`     | 12 |    362.02 | -7.579105 | +2.83e-01 |
-| LiH | `nvidia:fp64` | 12 | **211.68** | -7.579105 | +2.83e-01 |
+| Molecule | Backend | n | Wall (s) mean ± stderr | Energy mean (Ha) | min &#124;err&#124; (mHa) | chem. acc. |
+|---|---|:-:|---:|---:|---:|:-:|
+| H2  | `qpp-cpu`     | 3 | **16.87 ± 0.83** | -1.137270 | < 0.001 | 3 / 3 |
+| H2  | `nvidia:fp32` | 3 | **12.98 ± 0.39** | -1.137267 | 0.002   | 3 / 3 |
+| H2  | `nvidia:fp64` | 3 |   17.65 ± 1.08    | -1.137270 | < 0.001 | 3 / 3 |
+| LiH | `qpp-cpu`     | 3 |   1809.12 ± 7.03 | -7.835907 |   5.84  | 0 / 3 |
+| LiH | `nvidia:fp64` | 3 | **1086.56 ± 4.19** | -7.835907 |   5.84  | 0 / 3 |
 
-H2 (4 qubits) GPU is 12% slower than CPU - host<->device transfer
-dominates. LiH (12 qubits) GPU is **1.71x faster** than CPU on identical
-COBYLA trajectories - this is the crossover the project sets out to
-make concrete. See [Results interpretation](results-interpretation.md)
+H2 errors are vs FCI; LiH errors are vs PySCF-recomputed CASCI(2e,5o).
+H2 / FP64 GPU is ~4% slower than CPU on a 4-qubit problem (well within
+stderr) - host&hairsp;-&hairsp;device transfer dominates. H2 / FP32
+gets a 1.30x speedup. **LiH / FP64 GPU is 1.665x faster than CPU**, with
+~0.4% relative stderr on each backend, on identical COBYLA
+trajectories. No LiH run reaches chemical accuracy; the converged seeds
+sit ~6 mHa above CASCI(2e,5o) and one of three lands ~126 mHa above in a
+separate basin. That seed-variance signal is the part single-seed
+benchmarks hide. See [Results interpretation](results-interpretation.md)
 for the full discussion.
 
 ## Documentation

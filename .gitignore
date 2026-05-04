@@ -48,8 +48,14 @@ notebooks/.ipynb_checkpoints/
 
 # Results - keep directory but ignore generated artifacts.
 # Sample artifacts ship attached to GitHub Releases, not in the tree.
+# Lightweight committed summaries live under akamai-blackwell-multiseed/.
 results/*
 !results/.gitkeep
+!results/akamai-blackwell-multiseed/
+results/akamai-blackwell-multiseed/*
+!results/akamai-blackwell-multiseed/SUMMARY.csv
+!results/akamai-blackwell-multiseed/comparison.json
+!results/akamai-blackwell-multiseed/README.md
 
 # Terraform
 *.tfstate

@@ -53,44 +53,59 @@ computing in general.
 
 Each backend was run with three RNG seeds (42, 43, 44) on a fresh
 `g3-gpu-rtxpro6000-blackwell-1` VM in Akamai's `id-cgk` region. NVIDIA
-driver `nvidia-open-580.159.03`, CUDA 13.0, 96 GB VRAM, 16 vCPU, 172 GB
-system RAM. 15 specs total, 2 h 27 min of compute, ~$10.75 of VM time.
+driver `nvidia-open-580.159.03` (`nvidia-smi` reports max-supported
+CUDA 13.0); container uses `cuda-quantum-cu13` wheels on top of the
+CUDA 12.6 base image. 96 GB VRAM, 16 vCPU, 172 GB system RAM.
 
-| Molecule | Backend | n | Wall (s) mean ± stderr | Energy mean (Ha) | min &#124;err vs ref&#124; (mHa) |
-|---|---|:-:|---:|---:|---:|
-| H2  | `qpp-cpu`     | 3 | **16.87 ± 0.83** | -1.137270 | < 0.001 |
-| H2  | `nvidia:fp32` | 3 | **12.98 ± 0.39** | -1.137265 | 0.002 |
-| H2  | `nvidia:fp64` | 3 |   17.65 ± 1.08   | -1.137270 | < 0.001 |
-| LiH | `qpp-cpu`     | 3 |   1809.12 ± 7.03 | -7.835907 |  12.74 |
-| LiH | `nvidia:fp64` | 3 | **1086.56 ± 4.19** | -7.835907 |  12.74 |
+15 specs total. **2 h 27 min of bench compute.** Total billed VM
+lifetime was ~3 h 35 min (provisioning, NVIDIA driver install +
+reboot, container build, bench, results export, one mid-cycle reboot
+to clear `MaxStartups`, teardown), and at Akamai's `id-cgk` regional
+rate of $3.00/hr the VM cost ~$10.75 end-to-end &mdash; **not** 2 h 27
+min × $2.50/hr. The `id-cgk` and `br-gru` regions carry a $0.50/hr
+uplift over the $2.50/hr base SKU rate.
 
-GPU/CPU wall-time speedups (mean ± stderr propagated):
+| Molecule | Backend | n | Wall (s) mean ± stderr | Energy mean (Ha) | min &#124;err vs CASCI(2e,5o)&#124; (mHa) | chem. acc.<sup>†</sup> |
+|---|---|:-:|---:|---:|---:|:-:|
+| H2  | `qpp-cpu`     | 3 | **16.87 ± 0.83** | -1.137270 | < 0.001 | 3 / 3 |
+| H2  | `nvidia:fp32` | 3 | **12.98 ± 0.39** | -1.137267 | 0.002 | 3 / 3 |
+| H2  | `nvidia:fp64` | 3 |   17.65 ± 1.08   | -1.137270 | < 0.001 | 3 / 3 |
+| LiH | `qpp-cpu`     | 3 |   1809.12 ± 7.03 | -7.835907 |   5.84 | 0 / 3 |
+| LiH | `nvidia:fp64` | 3 | **1086.56 ± 4.19** | -7.835907 |   5.84 | 0 / 3 |
 
-- H2 / FP64: **0.96×** &mdash; FP64 GPU is now slightly *slower* than CPU
+<sup>†</sup> Chemical accuracy = `|error| < 1.6 mHa`. H2 references are
+FCI; LiH references are CASCI(2e,5o), both recomputed from PySCF on
+2026-05-04 to replace a v0.1.0 literature estimate that was off by
+~19.7 mHa for the LiH (2e,5o) value. See
+[`results/akamai-blackwell-multiseed/`](results/akamai-blackwell-multiseed/)
+for the per-run summary and the recomputation recipe.
+
+GPU/CPU wall-time speedups:
+
+- H2 / FP64: **0.96×** &mdash; FP64 GPU is slightly *slower* than CPU
   on a 4-qubit problem, well within stderr. Host&harr;device transfer
   dominates at this size.
-- H2 / FP32: **1.30×** &mdash; less precision overhead pays off on the
-  small statevector.
+- H2 / FP32: **1.30×** &mdash; lighter precision overhead pays off on
+  the small statevector.
 - **LiH / FP64: 1.665×** &mdash; the speedup is real and the variance
   bars are tight (~0.4% relative stderr on each backend).
 
-The post-v0.1.0 multi-seed bench also bumped LiH `--max-iterations` from
-300 to 1500. The v0.1.0 trace inspection had shown COBYLA was still
-descending at iter 300, so the +0.283 Ha residual was *not enough
-iterations*, not *stuck in a local minimum*. With 1500 iters:
+LiH convergence and seed variance:
 
-- 2/3 LiH seeds (42, 43) converge within 1.1 mHa of each other to
-  -7.875 to -7.876 Ha &mdash; this is the active-space FCI minimum.
-  The literature value of -7.862500 Ha stamped in our v0.1.0 reference
-  data is approximate; UCCSD spans the full active CI space for a
-  2-electron problem so our converged answer is exact within the
-  active-space approximation (relative to *full* FCI of -7.882362 Ha
-  for LiH/STO-3G, the converged seeds are 6&ndash;7 mHa above, the
-  irreducible "frozen-core" gap).
-- 1/3 LiH seeds (44) hits a different local minimum at -7.756 Ha
-  (~120 mHa above). This is the *real* variance signal that single-seed
-  benchmarks miss: UCCSD with COBYLA is sensitive to initialization
-  and 1-of-3 hits a basin you don't want.
+- 2 / 3 LiH seeds (42, 43) converge within 1.1 mHa of each other to
+  -7.875 to -7.876 Ha &mdash; that is **5.8&ndash;6.9 mHa above** the
+  PySCF-computed CASCI(2e,5o) minimum of -7.882164 Ha. None of these
+  runs reach the 1.6 mHa chemical-accuracy threshold; the residual is
+  optimizer / over-parametrization (the LiH ansatz currently
+  instantiates 92 UCCSD parameters on a 12-qubit kernel for a Hamiltonian
+  that lives on 5 active orbitals) rather than active-space frozen-core
+  error &mdash; CASCI(2e,5o) and full FCI are only 0.227 mHa apart at
+  this geometry, so the active space captures essentially all of the
+  FCI correlation.
+- 1 / 3 LiH seeds (44) lands in a different basin at -7.756 Ha,
+  ~126 mHa above the converged sibling seeds. This is the variance
+  signal single-seed benchmarks miss: UCCSD with COBYLA is sensitive
+  to initialization, and 1-in-3 lands somewhere you do not want.
 
 [![CPU vs GPU comparison page](docs/images/02-compare.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/compare/)
 
@@ -102,10 +117,12 @@ to -7.876 Ha, full manifest and host fingerprint inline:
 
 [![Results list](docs/images/03-results-list.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/results/)
 
-Raw artifacts (15 manifests + 15 traces + comparison report) live under
-[`results/akamai-blackwell-multiseed/`](results/akamai-blackwell-multiseed/);
-the v0.1.0 single-seed run remains under `results/akamai-jakarta/` for
-reference. See
+Committed lightweight artifacts (15-row `SUMMARY.csv` + aggregate
+`comparison.json`) live under
+[`results/akamai-blackwell-multiseed/`](results/akamai-blackwell-multiseed/).
+Full per-run manifests and traces are not in the repository; re-run the
+bench with `uv run cudaq-bp bench run-suite` on a fresh Blackwell host
+to regenerate them. See
 [docs/results-interpretation.md](docs/results-interpretation.md) for the
 methodology and full discussion.
 

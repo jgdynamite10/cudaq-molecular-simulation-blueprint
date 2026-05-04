@@ -5,14 +5,25 @@
 These two molecules give us a credible CPU-vs-GPU story without making
 unsupportable claims:
 
-- **H2 / STO-3G** is the textbook 4-qubit / ~3-parameter UCCSD problem.
-  Both backends should converge to chemical accuracy in well under a second.
-  H2 is the smoke test that proves the pipeline is correct end-to-end.
-- **LiH / STO-3G** with the default (2 electron / 5 orbital) active space is
-  a 10-qubit / ~24-parameter problem. The CPU statevector simulator is
-  noticeably slower than the GPU here; on a single Blackwell, the ratio is
-  large enough to be visible in plots, but small enough that the CPU run is
-  still feasible as a baseline (no waiting tens of minutes).
+- **H2 / STO-3G** is the textbook 4-qubit / 3-parameter UCCSD problem.
+  Both backends converge to chemical accuracy in seconds to tens of seconds
+  in this implementation; on the Blackwell host used for the multi-seed
+  bench, H2 finishes in ~13–18 s wall time per run depending on backend
+  and precision. H2 is the smoke test that proves the pipeline is correct
+  end-to-end.
+- **LiH / STO-3G** with the default (2 electron / 5 orbital) active space.
+  In theory the active space corresponds to a 10-qubit / ~24-parameter
+  problem, but the current LiH ansatz is instantiated against the full
+  molecule (n_qubits=12, n_electrons=4) before the active-space
+  Hamiltonian is applied, so the actual circuit recorded in every multi-seed
+  manifest is **12 qubits / 92 UCCSD parameters**. Closing that gap (a
+  properly active-space-restricted ansatz of 10 qubits / ~24 parameters) is
+  on the v0.2 follow-up list. The CPU statevector simulator is noticeably
+  slower than the GPU here: CPU runs take ~30 minutes per seed (1500
+  iterations of COBYLA), GPU FP64 runs take ~18 minutes. The CPU baseline
+  remains feasible &mdash; you can leave it running over a coffee &mdash;
+  but it is now long enough to expose meaningful GPU wall-time savings
+  rather than being a sub-second curiosity.
 
 We deliberately do **not** include molecules where CPU simulation becomes
 intractable (BeH2, H2O, larger). That would force us to compare GPU runs
@@ -52,17 +63,29 @@ benchmark harness can compute time-to-convergence.
 
 ## Reference values
 
-`app/quantum/reference_data.py` ships with published reference energies
-keyed by `(molecule, basis, bond_distance, active_space)`. Bond distance is
-matched within 0.01 Å so minor user perturbations still find the correct
+`app/quantum/reference_data.py` ships with reference energies keyed by
+`(molecule, basis, bond_distance, active_space)`. Bond distance is matched
+within 0.01 Å so minor user perturbations still find the correct
 reference.
 
-| molecule | basis  | R (Å)  | active space | method     | E (Ha)        |
-|----------|--------|--------|--------------|------------|---------------|
-| H2       | STO-3G | 0.7414 | full         | FCI        | -1.137270     |
-| H2       | STO-3G | 0.7474 | full         | FCI        | -1.137275     |
-| LiH      | STO-3G | 1.5957 | full         | FCI        | -7.882362     |
-| LiH      | STO-3G | 1.5957 | (2e, 5o)     | CASCI      | -7.862500     |
+The LiH references were recomputed via PySCF on 2026-05-04 (RHF + CASCI on
+the equilibrium geometry) so any reader with `pip install pyscf` can
+reproduce them locally. The earlier shipped LiH (2e, 5o) value of
+-7.862500 Ha was effectively the HF energy and was off by ~19.7 mHa; it
+has been replaced.
+
+| molecule | basis  | R (Å)  | active space | method                            | E (Ha)        |
+|----------|--------|--------|--------------|-----------------------------------|---------------|
+| H2       | STO-3G | 0.7414 | full         | FCI                               | -1.137270     |
+| H2       | STO-3G | 0.7474 | full         | FCI                               | -1.137275     |
+| LiH      | STO-3G | 1.5957 | full         | FCI (pyscf 2026-05-04)            | -7.882391     |
+| LiH      | STO-3G | 1.5957 | (2e, 5o)     | CASCI(2e,5o) (pyscf 2026-05-04)   | -7.882164     |
+
+The CASCI(2e,5o) and full-FCI minima for LiH/STO-3G at this geometry are
+only 0.227 mHa apart, so the (2e, 5o) active space already captures
+essentially all of the FCI correlation. Any error larger than ~1 mHa
+against CASCI(2e,5o) in this active space is therefore optimizer / ansatz
+residual rather than active-space frozen-core error.
 
 If a user picks an unusual geometry, the reference is `None` and only the
 absolute energy is reported (no error column).

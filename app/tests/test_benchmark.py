@@ -55,9 +55,9 @@ def _make_manifest(
             parameters=[0.1] * (3 if molecule == Molecule.H2 else 24),
             wall_time_seconds=wall_time,
             converged=True,
-            reference_energy=-1.137270 if molecule == Molecule.H2 else -7.882362,
+            reference_energy=-1.137270 if molecule == Molecule.H2 else -7.882391,
             error_vs_reference_hartree=energy
-            - (-1.137270 if molecule == Molecule.H2 else -7.882362),
+            - (-1.137270 if molecule == Molecule.H2 else -7.882391),
             chemical_accuracy_reached=True,
         ),
     )

@@ -1,27 +1,35 @@
 """Reference energies for validating VQE convergence.
 
-These are published, well-established numbers used to compute "error vs FCI"
-in run manifests. Quoted to 6 decimal places (Hartree).
+These are computed/published numbers used to compute "error vs reference"
+in run manifests. Quoted to 6 decimal places (Hartree). All values were
+recomputed with PySCF on 2026-05-04 (RHF + CASCI on the equilibrium
+geometry) so the stored references match what a reader can reproduce
+locally with ``pyscf`` at any time.
 
 Sources:
 
 - H2 / STO-3G FCI at the experimental bond length R = 0.7414 Å:
-  -1.137270 Ha. This number is reproducible by any FCI program and appears
-  throughout the quantum chemistry literature.
-- LiH / STO-3G FCI at R = 1.5957 Å (equilibrium): -7.882362 Ha.
+  -1.137270 Ha. Reproducible by any FCI program; appears throughout the
+  quantum chemistry literature.
+- LiH / STO-3G full FCI at R = 1.5957 Å (equilibrium): -7.882391 Ha,
+  computed via ``pyscf.mcscf.CASCI(mf, mol.nao, mol.nelectron)``.
 - LiH / STO-3G with a (2 electron, 5 orbital) active space at R = 1.5957 Å:
-  -7.862500 Ha (literature estimate). NB: the post-v0.1.0 multi-seed bench
-  consistently reaches energies of -7.875 to -7.876 Ha in this active space,
-  which is BELOW the literature estimate. UCCSD in a 2-electron / 5-orbital
-  active space is exact (it spans the full active CI space), so our converged
-  energies represent the true active-space FCI minimum and the literature
-  number above appears to be approximate. We retain it here as the reference
-  used at run time so historical manifests stay reproducible, but new
-  publications should compute the active-space FCI with pyscf at run time
-  rather than rely on this stored value.
+  -7.882164 Ha, computed via ``pyscf.mcscf.CASCI(mf, 5, 2)``.
 
-CHEMICAL_ACCURACY_HARTREE is the standard 1.6 mHa threshold used to decide
-whether a VQE run "reached chemical accuracy".
+Note on the LiH (2e, 5o) value: an earlier "literature estimate" of
+-7.862500 Ha that shipped in the v0.1.0 of this file was effectively the
+HF energy and was approximately 19.7 mHa above the true CASCI(2e, 5o)
+minimum. The recomputed PySCF value above is correct and is what
+post-v0.1.1 manifests are scored against. The recomputed value also
+shows that the (2e, 5o) active space captures essentially all of the
+full-FCI correlation: the gap between the active-space CASCI and full
+FCI is only 0.227 mHa for LiH/STO-3G at this geometry, so there is no
+material "frozen-core" residual in the (2e, 5o) calculation; any
+remaining error vs CASCI(2e, 5o) is optimizer / ansatz residual rather
+than an active-space limitation.
+
+CHEMICAL_ACCURACY_HARTREE is the standard 1.6 mHa threshold used to
+decide whether a VQE run "reached chemical accuracy".
 """
 
 from __future__ import annotations
@@ -66,22 +74,21 @@ REFERENCES: dict[tuple[str, str, float, tuple[int, int] | None], ReferenceEnergy
         molecule="lih",
         basis="sto-3g",
         bond_distance_angstrom=1.5957,
-        method="FCI",
-        energy_hartree=-7.882362,
-        note="Full FCI at equilibrium geometry.",
+        method="FCI (pyscf 2026-05-04)",
+        energy_hartree=-7.882391,
+        note="Full FCI at equilibrium geometry, computed via pyscf CASCI on all orbitals.",
     ),
     ("lih", "sto-3g", 1.5957, (2, 5)): ReferenceEnergy(
         molecule="lih",
         basis="sto-3g",
         bond_distance_angstrom=1.5957,
-        method="CASCI(2e,5o)",
-        energy_hartree=-7.862500,
+        method="CASCI(2e,5o) (pyscf 2026-05-04)",
+        energy_hartree=-7.882164,
         note=(
             "(2 active electrons, 5 active orbitals); freeze 1s of Li. "
-            "This literature estimate appears to be approximate: the post-v0.1.0 "
-            "multi-seed bench converged to -7.876 Ha for 2 of 3 seeds, which is "
-            "below this value, so the true active-space FCI minimum is closer to "
-            "-7.876 Ha. Retained for backward-compat with v0.1.0 manifests."
+            "Computed via pyscf.mcscf.CASCI(mf, 5, 2) on the RHF reference. "
+            "Gap to full FCI at this geometry is only 0.227 mHa, so the "
+            "active space captures essentially all of the FCI correlation."
         ),
     ),
 }

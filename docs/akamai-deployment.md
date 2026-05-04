@@ -61,12 +61,40 @@ ansible-playbook -i ../terraform/akamai/inventory.ini playbook.yml
 
 The playbook applies three roles in sequence:
 
-1. **`nvidia_driver`** - installs the NVIDIA driver branch and CUDA 12.6
-   runtime, reboots if needed, and verifies `nvidia-smi -L` reports a GPU.
+1. **`nvidia_driver`** - installs the open-source NVIDIA driver branch
+   (`nvidia-open-580` is the default; required for Blackwell), reboots if
+   needed, and verifies `nvidia-smi -L` reports a GPU. The host playbook
+   does **not** install a host-side CUDA toolkit or runtime &mdash; the CUDA
+   runtime is supplied by the application container, so the host only
+   needs the kernel modules and the headers needed to build them.
 2. **`docker`** - installs Docker CE and the NVIDIA Container Toolkit; runs
    `docker run --rm --gpus all nvidia/cuda:... nvidia-smi -L` as a smoke test.
-3. **`app`** - pulls the application image from GHCR, renders a systemd unit,
-   starts it, and waits for `/health` to return 200.
+3. **`app`** - tarballs the controller's source tree, ships it to the VM,
+   builds the application image natively (`docker build -t
+   cudaq-blueprint:local -f containers/Dockerfile .`), renders a systemd
+   unit, starts it, and waits for `/health` to return 200. (For the v1
+   release the role builds locally on the VM; the GHCR-pull path is used
+   by the release workflow rather than by this playbook.)
+
+### A note on CUDA versions
+
+There are three distinct "CUDA versions" worth keeping straight when
+provisioning a Blackwell host:
+
+| What | Where it lives | Value on this stack |
+|---|---|---|
+| Driver-reported max-supported CUDA | `nvidia-smi` on the host | 13.0 (because `nvidia-open-580` supports CUDA 13) |
+| Host CUDA toolkit / runtime | `apt list --installed` on the host | **none** &mdash; not installed |
+| Container CUDA runtime | base image of the application container | 12.6 (`nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04`) |
+| CUDA-Q wheels inside the container | `pip show cuda-quantum-cu13` | `cu13`, i.e. compiled against CUDA 13 |
+
+The `cu13` wheels are forward-compatible with the CUDA 12.6 runtime in
+the base image because NVIDIA's CUDA 13 user-space libraries can run
+against a CUDA 12.x runtime present in the container, as long as the
+host driver is recent enough to support CUDA 13. So the application is
+"CUDA 13" from the kernel-launch API perspective, "CUDA 12.6" from the
+container runtime's perspective, and the host has no CUDA toolkit at
+all.
 
 A single end-to-end script wraps both Terraform and Ansible:
 

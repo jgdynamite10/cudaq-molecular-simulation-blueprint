@@ -100,18 +100,23 @@ def default_blog_suite(
 
     For each backend we sweep multiple seeds so we can quote mean ± stderr.
 
-    The Phase 7e v0.1.0 suite used a single seed with ``max_iterations=300`` for
-    LiH; the trajectory inspection on those manifests showed COBYLA was still
-    descending steadily at iter 300 (last quarter dropped ~0.048 Ha), so the
-    residual error vs FCI of +0.283 Ha is "not enough iterations", not "stuck
-    in a local minimum". The defaults here bump LiH to ``max_iterations=1500``
-    so the optimizer has room to converge to chemical accuracy. ``h2`` is left
-    at 200 because COBYLA already plateaus there in ~75 evaluations.
+    LiH defaults to ``max_iterations=1500``: with 92 UCCSD parameters on a
+    12-qubit kernel (the LiH ansatz currently instantiates the full-molecule
+    parameter space rather than restricting to the (2e, 5o) active space,
+    even though the Hamiltonian itself does carry the active-space
+    restriction), COBYLA needs the full 1500 iterations to settle into the
+    converged basin. ``h2`` is left at 200 because COBYLA already plateaus
+    there in ~75 evaluations.
 
-    Three seeds is a deliberate trade-off: for a 12-qubit LiH run on Blackwell
-    each seed at 1500 iterations costs ~17 minutes of GPU time (~$0.85), so
-    five seeds x two backends would have cost ~$15. Three seeds gives a
-    workable n=3 mean +/- stderr and keeps a fresh-VM bench cycle under $6.
+    Three seeds is a deliberate trade-off. The 2026-05-04 multi-seed bench in
+    Akamai's id-cgk (Jakarta) region, billed at the regional rate of $3.00/hr
+    (a $0.50/hr uplift on the $2.50/hr base SKU), came in at ~$10.75 of total
+    VM lifetime: ~2 h 27 min of bench compute plus ~1 h 8 min of provisioning
+    + driver install + container build + results export + teardown overhead.
+    Bumping the seed count from 3 to 5 would have added roughly an hour of
+    LiH compute (each LiH seed is ~30 min on CPU and ~18 min on GPU), pushing
+    the bench cycle past $13 without changing the qualitative conclusions.
+    Three seeds gives a workable n=3 mean +/- stderr at acceptable cost.
     """
     suite: list[BenchmarkSpec] = []
     backends_h2 = [BackendIdentifier.CPU, BackendIdentifier.GPU_FP32, BackendIdentifier.GPU_FP64]

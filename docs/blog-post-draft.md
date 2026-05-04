@@ -13,67 +13,77 @@
 
 ## Why this work, and why now
 
-Most organizations will encounter quantum computing for the first time
-through their classical infrastructure, not by pointing a workload at a
-QPU. The near-term loop &mdash; model a system, build a circuit, optimize
-parameters, evaluate the result against a Hamiltonian many thousands of
-times &mdash; is overwhelmingly hybrid CPU + GPU work today. A QPU
-becomes one execution target eventually; classical accelerators are the
-substrate now.
+For most enterprise leaders, quantum computing still feels like a
+future conversation. The infrastructure pattern underneath it,
+however, is already here. Practical quantum development today is
+hybrid: CPUs orchestrate, GPUs simulate, optimizers iterate, and a QPU
+remains an optional future execution target. That is why this project
+matters. It is not a claim that quantum advantage has arrived. It is a
+small, reproducible example of how to evaluate the accelerated
+workloads that are forming around the quantum software stack right
+now.
 
-That made me want to see the workflow concretely &mdash; not on a slide,
-but provisioned, run, captured, and torn down on infrastructure I can
-hand to anyone else. The companion repository,
+The companion repository,
 [`cudaq-molecular-simulation-blueprint`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint),
-is the result: a small reference implementation of the variational
-quantum eigensolver (VQE) for two textbook molecules, built on NVIDIA's
+is a reference implementation of the variational quantum eigensolver
+(VQE) for two textbook molecules, built on NVIDIA's
 [CUDA-Q](https://nvidia.github.io/cuda-quantum/) and
 [cuQuantum](https://developer.nvidia.com/cuquantum-sdk)'s `cuStateVec`,
-validated end-to-end on Akamai Cloud RTX PRO 6000 Blackwell GPUs.
+validated end-to-end on Akamai Cloud RTX PRO 6000 Blackwell GPUs. The
+post that follows is a field note from running it: where current
+GPUs help the hybrid quantum workflow, where they do not, and how to
+evaluate the question carefully for your own organization without
+leaning on vendor narrative. CUDA-Q's `nvidia-fp64` target runs the
+whole VQE loop &mdash; circuit construction, expectation evaluation,
+parameter update &mdash; on the GPU with the optimizer on the CPU; you
+do not write any CUDA, you write quantum kernels in CUDA-Q's Python
+frontend and pick a target.
 
-This post is meant as a field note. Where do current-generation GPUs
-help the hybrid quantum workflow, where don't they, and how do you
-evaluate that question for your own organization without leaning on
-vendor narrative? The practical value in this space starts with
-experimentation, validation, and shortening time-to-decision &mdash;
-long before any QPU hours are booked. CUDA-Q's `nvidia-fp64` target
-runs the whole VQE loop &mdash; circuit construction, expectation
-evaluation, parameter update &mdash; on the GPU with the optimizer on
-the CPU; you don't write any CUDA, you write quantum kernels in
-CUDA-Q's Python frontend and pick a target.
+The practical value of this kind of work starts with experimentation,
+validation, and shortening time-to-decision, long before any QPU hours
+are booked. The numbers below come from a multi-seed re-bench on a
+single Blackwell GPU. They are honest about both the cases where the
+GPU pays for itself and the cases where it does not.
 
 ---
 
-## Why ITDMs should care
+## Why this matters to infrastructure leaders
 
-Quantum computing tends to enter executive conversations as a
+Quantum computing usually enters executive conversations as a
 future-tense topic. The near-term reality is more useful and more
 mundane: the workflow is already running, on classical infrastructure,
 mostly on GPUs that organizations are already provisioning for AI
 training and inference.
 
-Three takeaways for someone evaluating where this fits in an
-infrastructure portfolio:
+Five points for someone evaluating where this fits in an infrastructure
+portfolio:
 
-- **GPU optionality extends beyond AI inference.** The same
-  Blackwell-class accelerators that drive ML serving today are the
-  simulation substrate for hybrid quantum algorithms. That is worth
-  knowing when sizing capacity, planning utilization, or framing the
-  return on accelerator investment.
-- **Evidence over narrative, by construction.** The repository is
-  small, but it ships every artifact: host fingerprint, full
-  convergence traces, RNG seeds, container digest, git SHA, and
-  multi-seed wall-time measurements with stderr. That posture &mdash;
-  publish what you ran, on what hardware, with what variance &mdash;
-  is the way to evaluate emerging accelerated workloads responsibly,
-  and it generalizes well past quantum.
+- **This is a repeatable pattern for evaluating emerging accelerated
+  workloads.** The structure &mdash; small typed Python core, container,
+  Terraform-provisioned GPU host, multi-seed sweep, manifest-per-run,
+  static UI snapshot &mdash; generalizes well past quantum. The same
+  template can be pointed at any new accelerated stack you need to
+  evaluate before committing portfolio dollars.
+- **The value is not only speedup; it is reproducibility, auditability,
+  and knowing where the GPU starts to pay for itself.** A 1.665&times;
+  wall-time win on a 12-qubit problem is real, but the more useful
+  artifact is the manifest: CUDA-Q version, GPU model, driver version,
+  container digest, git SHA, RNG seed, optimizer settings, and full
+  convergence trace, captured per run.
+- **Akamai Cloud can host a Blackwell-class scientific workload with
+  standard IaC and containers.** One Terraform apply, one Ansible
+  playbook, a Docker container, and a systemd unit. No bespoke
+  orchestration, no quantum-specific tooling, no custom kernels.
+- **The application core remains provider-agnostic.** Akamai-specific
+  deployment lives entirely under `infra/`. The same Docker image runs
+  on any cloud or on-prem host that has a Blackwell-class GPU and the
+  NVIDIA Container Toolkit installed.
 - **A technical infrastructure thesis, not a platform claim.** The
-  takeaway here is that Blackwell-class GPUs are a viable platform
-  for the hybrid quantum workloads available today, and Akamai Cloud
-  is one validated path to running them. That is a technical thesis
-  with reproducible evidence behind it. It is not a quantum-advantage
-  claim, and it is not a positioning of Akamai as a dedicated quantum
-  cloud.
+  takeaway is that Blackwell-class GPUs are a viable platform for the
+  hybrid quantum workloads that exist today, and Akamai Cloud is one
+  validated path to running them. That is a technical thesis with
+  reproducible evidence behind it. It is not a quantum-advantage claim,
+  and it is not a positioning of Akamai as a dedicated quantum cloud.
 
 The rest of this post walks through the experiment that supports those
 takeaways and the places where the data complicated my own thinking.
@@ -114,30 +124,54 @@ cudaq.set_target("nvidia", option="fp64")
 The hardware host is an Akamai Cloud `g3-gpu-rtxpro6000-blackwell-1`
 instance in the Jakarta (`id-cgk`) region, provisioned and torn down
 with Terraform + Ansible: NVIDIA RTX PRO 6000 Blackwell Server Edition,
-driver `580.159.03` (the open kernel module branch &mdash; required for
-Blackwell), CUDA 13.0, 96 GB VRAM, 16 vCPU, 172 GB system RAM. The full
-deployment is one Terraform apply plus one Ansible playbook, all gated
-behind an SSH key that exists only for the bench cycle. The numbers
-below come from a multi-seed re-bench done on 2026-05-04 (3 RNG seeds
-per backend, 15 specs total): VM lifetime was 2 h 27 min of compute
-plus ~30 min of bootstrap, billed at ~$3.00/hr.
+96 GB VRAM, 16 vCPU, 172 GB system RAM. The host runs the open-source
+NVIDIA driver branch (`nvidia-open-580.159.03`); `nvidia-smi` reports
+max-supported CUDA 13.0 there. The container provides its own CUDA
+runtime &mdash; CUDA-Q's `cu13` Python wheels on top of an
+`nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04` base image &mdash; so
+the host playbook installs the kernel modules and the NVIDIA Container
+Toolkit, and the application's CUDA dependencies live entirely inside
+the image. The full deployment is one Terraform apply plus one Ansible
+playbook, all gated behind an SSH key that exists only for the bench
+cycle.
+
+The numbers below come from a multi-seed re-bench done on 2026-05-03/04
+(3 RNG seeds per backend, 15 specs total). Bench compute time alone was
+**2 h 27 min**. End-to-end VM lifetime &mdash; provisioning, NVIDIA
+driver install plus reboot, container build, the bench itself, results
+export, one mid-cycle reboot to clear an SSH `MaxStartups` state, and
+teardown &mdash; was **~3 h 35 min**. Akamai's Jakarta and S&atilde;o
+Paulo regions carry a $0.50/hr regional uplift over the base
+`g3-gpu-rtxpro6000-blackwell-1` rate, putting the effective rate at
+**$3.00/hr**, and the end-to-end VM cost was therefore **~$10.75**
+&mdash; not 2 h 27 min &times; $2.50/hr. Treating cost-of-experiment as
+"compute &times; base SKU rate" is the easiest way to under-estimate a
+bench cycle by 2&times; or more.
 
 ---
 
 ## Results (multi-seed, n=3 per backend)
 
 Every backend was run with seeds 42, 43, 44 on the same Blackwell host.
-Full manifests and traces live under
+A 15-row summary CSV and aggregate `comparison.json` live under
 [`results/akamai-blackwell-multiseed/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/results/akamai-blackwell-multiseed)
-in the repo. Headline aggregates:
+in the repo. Headline aggregates (errors quoted against PySCF
+references recomputed on 2026-05-04):
 
-| Molecule | Backend | n | Wall (s) mean &plusmn; stderr | Energy mean (Ha) | min &#124;err vs ref&#124; (mHa) |
-|---|---|:-:|---:|---:|---:|
-| H<sub>2</sub>  | `qpp-cpu`     | 3 | **16.87 &plusmn; 0.83** | -1.137270 | < 0.001 |
-| H<sub>2</sub>  | `nvidia:fp32` | 3 | **12.98 &plusmn; 0.39** | -1.137265 | 0.002 |
-| H<sub>2</sub>  | `nvidia:fp64` | 3 |   17.65 &plusmn; 1.08    | -1.137270 | < 0.001 |
-| LiH | `qpp-cpu`     | 3 |   1809.12 &plusmn; 7.03 | -7.835907 | 12.74 |
-| LiH | `nvidia:fp64` | 3 | **1086.56 &plusmn; 4.19** | -7.835907 | 12.74 |
+| Molecule | Backend | n | Wall (s) mean &plusmn; stderr | Energy mean (Ha) | min &#124;err&#124; (mHa) | chem. acc. |
+|---|---|:-:|---:|---:|---:|:-:|
+| H<sub>2</sub>  | `qpp-cpu`     | 3 | **16.87 &plusmn; 0.83** | -1.137270 | < 0.001 | 3 / 3 |
+| H<sub>2</sub>  | `nvidia:fp32` | 3 | **12.98 &plusmn; 0.39** | -1.137267 | 0.002   | 3 / 3 |
+| H<sub>2</sub>  | `nvidia:fp64` | 3 |   17.65 &plusmn; 1.08    | -1.137270 | < 0.001 | 3 / 3 |
+| LiH | `qpp-cpu`     | 3 |   1809.12 &plusmn; 7.03 | -7.835907 |   5.84  | 0 / 3 |
+| LiH | `nvidia:fp64` | 3 | **1086.56 &plusmn; 4.19** | -7.835907 |   5.84  | 0 / 3 |
+
+H<sub>2</sub> errors are vs FCI; LiH errors are vs CASCI(2e,5o), which
+is essentially identical to full FCI for this geometry (the gap is
+0.227 mHa). The "chem. acc." column counts how many of the three seeds
+land within the 1.6 mHa chemical-accuracy threshold &mdash; all three
+H<sub>2</sub> seeds do; none of the LiH seeds do, even with 1500
+optimizer iterations.
 
 Two stories show up in the data, and they both matter.
 
@@ -188,40 +222,87 @@ VRAM is barely touched here &mdash; but it's the thing that makes the
 next jumps (16, 18, 20-qubit active spaces with bigger basis sets)
 tractable on a single card.
 
-### Why multi-seed actually changed my read of the data
+### Why multi-seed mattered
 
-The v0.1.0 single-seed cut quoted a 1.71&times; LiH speedup on a 300-
-iteration COBYLA cap. That measurement was honest, but it was also
-incomplete in two specific ways, and walking through them is the heart
-of why multi-seed reruns matter for any workload like this.
+A single-seed bench would have produced a tidy story for LiH: pick
+seed 42, get a 1.665&times; speedup with the energy converged to
+-7.875 Ha, mention the residual against the active-space reference,
+ship the post. Multi-seed turns that tidy story into a more honest
+one.
 
-Trace inspection on the v0.1.0 manifest showed COBYLA was still
-descending steadily at iter 300 &mdash; the last quarter of that run
-dropped 0.048 Ha by itself &mdash; so the +0.283 Ha residual error
-versus FCI was *not enough iterations*, not *stuck in a local
-minimum*. Bumping LiH `--max-iterations` from 300 to 1500 and re-running
-with three seeds turned a single anecdotal data point into something
-with structure:
+With three seeds and 1500 COBYLA iterations:
 
-- 2 of 3 seeds (42, 43) converged to within 1.1 mHa of each other,
-  landing at -7.875 to -7.876 Ha. UCCSD with single and double
-  excitations spans the full active CI space for a 2-electron system,
-  so this *is* the active-space FCI minimum.
-- 1 of 3 seeds (44) hit a different local minimum at -7.756 Ha, about
-  120 mHa above the converged answer.
+- 2 of 3 seeds (42, 43) converge to within 1.1 mHa of each other,
+  landing at -7.875 to -7.876 Ha. The wall-time speedup between CPU
+  and GPU is identical for both seeds (the optimizer takes the same
+  trajectory; only execution time changes), and stderr on each
+  backend's wall time is around 0.4% relative.
+- 1 of 3 seeds (44) lands in a different basin at -7.756 Ha, about
+  126 mHa above the converged sibling seeds. The CPU and GPU runs of
+  seed 44 land at the same energy as each other, just on a different
+  initial trajectory.
 
-That third seed is the real signal multi-seed buys you. UCCSD with
-COBYLA is sensitive to initialization, and 1-in-3 lands in a basin you
-do not want. A version of this post that quoted only seed 42 would
-have given a tidier picture than the workload actually has. The
-variance is real, the median is honest, and the 1.665&times; speedup
-now carries credible error bars rather than a single observation that
-happened to land where I hoped.
+That third seed is the part of the picture single-seed benchmarks
+hide. UCCSD with COBYLA is sensitive to initialization, and 1-in-3
+lands somewhere you do not want. A version of this post that quoted
+only seed 42 would have given a tidier picture than the workload
+actually has. The variance is real, the median is honest, and the
+1.665&times; speedup now carries credible error bars rather than a
+single observation that happened to land where I hoped.
 
-The remaining ~6&ndash;7 mHa gap between the converged seeds and the
-*full* FCI energy of -7.882362 Ha is the active-space frozen-core
-error, not optimizer error. Closing it calls for a bigger active space
-or a richer basis, not a better optimizer.
+There is a related credibility story underneath the LiH numbers. The
+converged seeds 42 and 43 sit ~5.8&ndash;6.9 mHa above the
+PySCF-computed CASCI(2e, 5o) reference of -7.882164 Ha &mdash;
+**none** of the three seeds reaches the 1.6 mHa chemical-accuracy
+threshold. That gap is **not** an active-space frozen-core limitation:
+PySCF reports the (2e, 5o) and full-FCI minima only 0.227 mHa apart
+for this geometry, so the active space already captures essentially
+all of the FCI correlation. The gap is optimizer / over-parametrization
+residual: the LiH ansatz currently instantiates 92 UCCSD parameters on
+a 12-qubit kernel even though the active-space Hamiltonian has support
+on only 5 active orbitals, which leaves COBYLA optimizing in a much
+larger parameter space than the problem needs. Closing the remaining
+gap is a question of either narrowing the ansatz to match the active
+space, or replacing COBYLA with a gradient-based optimizer (L-BFGS-B
+with parameter-shift gradients), or simply running longer. None of
+those is a vendor problem; they are engineering choices the project
+will revisit in a follow-up post.
+
+---
+
+## What the numbers actually say
+
+Three findings, all of them generalizable beyond this specific
+workload:
+
+1. **Tiny workloads can make GPU acceleration look bad because overhead
+   dominates.** On the 4-qubit H<sub>2</sub> Hamiltonian (a 16-amplitude
+   statevector), an FP64 Blackwell card finishes ~4% slower than a
+   16-core CPU running the same kernel, well within stderr. CUDA-Q is
+   doing the right thing; the GPU simply has not been given enough
+   work to amortize host&hairsp;-&hairsp;device transfer and
+   kernel-launch overhead. This is the part most marketing material
+   skips.
+2. **Larger statevector workloads begin to show the GPU advantage.**
+   On the 12-qubit LiH UCCSD ansatz (~4096-amplitude statevector,
+   ~hundreds of Pauli terms per evaluation), the FP64 GPU finishes
+   ~1.665&times; faster than the CPU on the same 1500-iteration
+   COBYLA budget. The wall-time stderr on each backend is under 0.4%
+   relative, so the speedup is a tight measurement, not a single
+   observation.
+3. **Optimizer initialization matters; seed variance is not noise, it
+   is part of the engineering reality.** With three seeds, two
+   converge to nearly identical energies and one lands ~126 mHa above
+   in a separate basin. A single-seed bench would have hidden this.
+   The cost of being honest about it is one extra row in the results
+   table; the value is a credible error bar on every claim that
+   follows.
+
+These three findings are not pro-GPU or anti-GPU. They are
+descriptive: a responsible bench tells you *which* workloads benefit
+from a Blackwell-class accelerator, by *how much*, with *what
+variance*, against *what reference*. That is the artifact an
+infrastructure team can act on.
 
 ---
 
@@ -247,12 +328,15 @@ published here are intended as a starting curve others can extend.
 
 **3. Reproducibility belongs in the design, not the appendix.** Every
 run in this project captures CUDA-Q version, GPU model, driver
-version, CUDA version, OS, container digest, git SHA, and seed. The
-bench tarball is attached to the GitHub release with a SHA256. Anyone
-can re-run this on their own Blackwell, on their own CPU, on their
-own laptop, on their own cloud. That kind of provenance is what turns
-an "X is N times faster than Y" anecdote into something an
-infrastructure team can act on.
+version, CUDA version, OS, container digest, git SHA, RNG seed, and
+optimizer settings. A 15-row summary CSV plus an aggregate JSON live
+in the repository under `results/akamai-blackwell-multiseed/`, with
+references recomputed from PySCF so a reader with `pip install pyscf`
+can reproduce the reference values locally. Anyone can re-run the
+bench on their own Blackwell, on their own CPU, on their own laptop,
+on their own cloud. That kind of provenance is what turns an "X is N
+times faster than Y" anecdote into something an infrastructure team
+can act on.
 
 **4. The artifact and the post belong together.** The
 [live UI](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/)
@@ -300,10 +384,15 @@ terraform destroy   # mandatory; cost meter stops
 ```
 
 Total cost for the multi-seed bench cycle that produced the numbers
-above: ~$10.75 for ~3.5 hours of `g3-gpu-rtxpro6000-blackwell-1` time
-(15 specs &times; 3 seeds, including ~30 minutes of bootstrap and
-teardown overhead). The original v0.1.0 single-seed cut was $3.84 for
-1 h 17 min.
+above: **~$10.75** for **~3 h 35 min** of total VM lifetime on
+`g3-gpu-rtxpro6000-blackwell-1` at the Jakarta regional rate of
+$3.00/hr. That figure includes provisioning, NVIDIA driver install +
+reboot, container build, the 2 h 27 min of bench compute itself,
+results export, and teardown. The base SKU rate is $2.50/hr; the
+Jakarta and S&atilde;o Paulo regions carry a $0.50/hr uplift, so a
+"compute-time &times; base-rate" estimate would have under-shot the
+real bill by roughly 2&times;. Always destroy the instance when not
+actively using it.
 
 The full Terraform module, Ansible roles, and Dockerfile are in the
 repo under `infra/`. The application code is provider-agnostic &mdash; you
@@ -318,15 +407,16 @@ run.
 Three things I would do before scaling these numbers up in a
 follow-up post:
 
-- **Optimizer + ansatz upgrade.** The 1-of-3 LiH local minimum is
-  fixable by replacing COBYLA with L-BFGS-B and parameter-shift
-  gradients. The active-space frozen-core gap (6&ndash;7 mHa to full
-  FCI) is fixable by enlarging the active space. Both swaps are recipe
-  changes; the rest of the pipeline doesn't move.
+- **Optimizer + ansatz upgrade.** The 1-of-3 LiH local minimum and the
+  ~6 mHa gap on the converged seeds are both fixable by replacing
+  COBYLA with L-BFGS-B and parameter-shift gradients, and by narrowing
+  the ansatz so it instantiates the right number of UCCSD parameters
+  for the (2e, 5o) active space rather than the full molecule. Both
+  swaps are recipe changes; the rest of the pipeline does not move.
 - **Bigger active spaces.** The same 96 GB Blackwell that yawned
-  through 12 qubits will hold 28&ndash;30 qubit statevectors comfortably.
-  That's the region where exact diagonalization on a CPU stops being
-  practical, so it's the natural next data point.
+  through 12 qubits will hold 28&ndash;30 qubit statevectors
+  comfortably. That is the regime where exact diagonalization on a CPU
+  stops being practical, so it is the natural next data point.
 - **Multi-GPU.** Akamai's `g3-gpu-rtxpro6000-blackwell-2` SKU has two
   cards; CUDA-Q's `nvidia-mgpu` target slices the statevector across
   them. The current comparisons were held to a single card on purpose

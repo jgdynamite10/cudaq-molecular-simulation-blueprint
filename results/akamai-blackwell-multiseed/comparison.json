@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-05-04T12:36:00Z",
+  "host": {
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "driver": "580.159.03 (nvidia-open-580)",
+    "driver_max_cuda": "13.0",
+    "vram_gib": 96,
+    "vcpu": 16,
+    "system_ram_gib": 172,
+    "cloud": "Akamai Cloud, g3-gpu-rtxpro6000-blackwell-1, id-cgk"
+  },
+  "references": {
+    "h2_sto3g_R0_7414_FCI_pyscf": -1.13727,
+    "lih_sto3g_R1_5957_FCI_pyscf": -7.882391,
+    "lih_sto3g_R1_5957_CASCI_2e5o_pyscf": -7.882164,
+    "reference_recomputed_via": "pyscf 2026-05-04 (RHF + CASCI on equilibrium geometry)"
+  },
+  "groups": {
+    "h2_qpp_cpu": {
+      "n": 3,
+      "wall_seconds_mean": 16.873,
+      "wall_seconds_stderr": 0.833,
+      "energy_hartree_mean": -1.13727,
+      "min_abs_error_mhartree": 0.0002,
+      "mean_error_mhartree": -0.0002,
+      "chemical_accuracy_reached_count": 3
+    },
+    "h2_nvidia_fp32": {
+      "n": 3,
+      "wall_seconds_mean": 12.976,
+      "wall_seconds_stderr": 0.39,
+      "energy_hartree_mean": -1.137267,
+      "min_abs_error_mhartree": 0.0018,
+      "mean_error_mhartree": 0.0028,
+      "chemical_accuracy_reached_count": 3
+    },
+    "h2_nvidia_fp64": {
+      "n": 3,
+      "wall_seconds_mean": 17.653,
+      "wall_seconds_stderr": 1.076,
+      "energy_hartree_mean": -1.13727,
+      "min_abs_error_mhartree": 0.0002,
+      "mean_error_mhartree": -0.0002,
+      "chemical_accuracy_reached_count": 3
+    },
+    "lih_qpp_cpu": {
+      "n": 3,
+      "wall_seconds_mean": 1809.119,
+      "wall_seconds_stderr": 7.034,
+      "energy_hartree_mean": -7.835907,
+      "min_abs_error_mhartree": 5.8357,
+      "mean_error_mhartree": 46.2571,
+      "chemical_accuracy_reached_count": 0
+    },
+    "lih_nvidia_fp64": {
+      "n": 3,
+      "wall_seconds_mean": 1086.563,
+      "wall_seconds_stderr": 4.192,
+      "energy_hartree_mean": -7.835907,
+      "min_abs_error_mhartree": 5.8357,
+      "mean_error_mhartree": 46.2571,
+      "chemical_accuracy_reached_count": 0
+    }
+  },
+  "speedups": {
+    "h2_fp64_vs_cpu": 0.956,
+    "h2_fp32_vs_cpu": 1.3,
+    "lih_fp64_vs_cpu": 1.665
+  },
+  "notes": [
+    "All 15 specs were run on the same Akamai Blackwell VM in id-cgk (Jakarta) on 2026-05-03/04.",
+    "3 RNG seeds (42, 43, 44) per backend/molecule combination.",
+    "H2 max_iterations = 200; LiH max_iterations = 1500.",
+    "References recomputed via pyscf on 2026-05-04 to replace an approximate v0.1.0 literature estimate that was off by ~19.7 mHa for the LiH (2e,5o) value.",
+    "Chemical accuracy threshold = 1.6 mHa.",
+    "Error column is signed: positive = above the reference (less bound), negative = below.",
+    "No LiH seed reaches chemical accuracy of either CASCI(2e,5o) or full FCI; the converged seeds 42/43 sit ~6 mHa above CASCI(2e,5o) and seed 44 lands in a separate basin ~126 mHa above. This is optimizer/over-parametrization residual, not active-space frozen-core error (the (2e,5o) -> full FCI gap is only 0.227 mHa here)."
+  ]
+}

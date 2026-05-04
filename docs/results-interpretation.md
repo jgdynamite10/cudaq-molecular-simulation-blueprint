@@ -55,14 +55,33 @@ quantity to compare.
 ## Reading active-space results
 
 For LiH the default active space is `(2 active electrons, 5 active
-orbitals)` with the lithium 1s frozen as core. The reported energy converges
-to the **CASCI(2e,5o) energy**, not to full FCI. The reference table in
-`app/quantum/reference_data.py` reflects this, so chemical accuracy is
-measured against the right target.
+orbitals)` with the lithium 1s frozen as core. The Hamiltonian itself
+applies the active-space restriction; the **ansatz**, however, is
+currently instantiated against the full LiH molecule (n_qubits=12,
+n_electrons=4, 92 UCCSD parameters), so the multi-seed bench manifests
+record 12-qubit / 92-parameter circuits even for the active-space
+problem. In a tighter v0.2 implementation the ansatz will be restricted
+to match the active space (10 qubits, ~24 parameters); the reference
+energies in `app/quantum/reference_data.py` will be unchanged because
+they are properties of the Hamiltonian, not the ansatz.
 
-If you pass `--core-orbitals 0 --active-orbitals 0`, you get full LiH (12
-qubits, more parameters, no active-space approximation), and the manifest
-will reference full FCI instead.
+The reference table in `app/quantum/reference_data.py` was recomputed
+via PySCF on 2026-05-04 (`pyscf.mcscf.CASCI`) so chemical accuracy is
+measured against PySCF-derived values rather than a literature
+estimate. For LiH/STO-3G at the equilibrium geometry, CASCI(2e,5o) and
+full FCI are only 0.227 mHa apart, so the active-space approximation
+is not the limiting factor: any error larger than ~1 mHa is optimizer /
+ansatz residual.
+
+The 2026-05-04 multi-seed bench reflects this. With 1500 COBYLA
+iterations, two of three seeds (42, 43) converge to within 1.1 mHa of
+each other but stop ~5.8&ndash;6.9 mHa above CASCI(2e,5o); the third
+seed (44) lands ~126 mHa above in a separate basin. None of these
+runs reach chemical accuracy. The path to closing the gap is a
+combination of (a) a properly active-space-restricted ansatz,
+(b) gradient-based optimization (parameter-shift L-BFGS-B), and
+(c) running longer. None of those is a vendor problem; they are
+engineering choices the project will revisit in a follow-up post.
 
 ## Sample size and noise
 

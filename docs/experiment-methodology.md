@@ -102,5 +102,5 @@ cudaq-bp run lih --backend gpu_fp64
 
 # Multi-seed sweep that drives the blog charts
 python -m app.benchmark.runner  # or write your own driver script
-cudaq-bp bench compare           # writes results/blog/cpu_vs_gpu.json
+cudaq-bp bench compare           # writes comparison report to results/
 ```

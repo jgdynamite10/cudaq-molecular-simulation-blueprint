@@ -270,6 +270,27 @@ will revisit in a follow-up post.
 
 ---
 
+## An important caveat: the LiH ansatz is bigger than the active-space reference
+
+One implementation detail matters for how to read the LiH result. The
+benchmark is scored against a CASCI(2e, 5o) reference &mdash; the exact
+energy for 2 active electrons in 5 active orbitals &mdash; but the
+current CUDA-Q UCCSD path instantiates a 12-qubit, 92-parameter ansatz
+(the full LiH molecule in STO-3G). That makes the workload useful for
+stressing CPU-vs-GPU statevector execution, but it also means the
+chemistry-convergence story is not yet as clean as it should be: the
+optimizer is searching in a 92-dimensional parameter space for a minimum
+that lives on a 5-orbital support, and COBYLA does not consistently find
+it within 1500 iterations.
+
+The right next step is to align the active-space Hamiltonian, ansatz
+dimension, and reference calculation, then rerun the multi-seed
+benchmark. Until then, treat the LiH error numbers as a
+*lower-bound-on-residual* for this specific UCCSD configuration, not as
+a statement about what the algorithm can achieve in principle.
+
+---
+
 ## What the numbers actually say
 
 Three findings, all of them generalizable beyond this specific

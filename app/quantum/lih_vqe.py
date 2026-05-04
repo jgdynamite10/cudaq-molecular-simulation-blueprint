@@ -1,9 +1,14 @@
 """LiH VQE experiment.
 
-LiH / STO-3G with the default (2 electron, 5 orbital) active space is a
-10-qubit problem with ~24 UCCSD parameters. It is the workload that makes the
-CPU-vs-GPU comparison meaningful: small enough to run on CPU as a baseline,
-large enough that the GPU statevector simulator pulls ahead noticeably.
+LiH / STO-3G with the default (2 electron, 5 orbital) active space. The
+Hamiltonian carries the active-space restriction, but the current UCCSD
+ansatz path instantiates against the full molecule: 12 qubits /
+92 parameters. A properly active-space-restricted ansatz would be
+10 qubits / ~24 parameters; aligning the two is on the v0.2 follow-up
+list. This is the workload that makes the CPU-vs-GPU comparison
+meaningful: small enough to run on CPU as a baseline (~30 min per seed),
+large enough that the GPU statevector simulator pulls ahead noticeably
+(1.665x on Blackwell FP64).
 """
 
 from __future__ import annotations

@@ -106,5 +106,13 @@ These are explicit non-goals. Do not let the blog post drift into them.
 - [ ] The repo is public and the README quick-start works on a clean machine.
 - [ ] The `infra/` directory contains nothing internal/unsupported about
       Akamai.
+- [ ] No stale LiH 12.74 mHa error value remains (correct value is
+      5.84 mHa against PySCF CASCI(2e,5o)).
+- [ ] Blog does not claim full manifests/traces are committed (only
+      SUMMARY.csv and comparison.json are committed).
+- [ ] Blog does not describe the LiH residual as active-space
+      frozen-core error (it is optimizer / ansatz-overparameterization
+      residual).
+- [ ] Blog consistently says LiH did not reach chemical accuracy.
 - [ ] No NVIDIA, Akamai, or quantum-vendor logos used without proper
       attribution / permission.

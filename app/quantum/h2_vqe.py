@@ -1,9 +1,9 @@
 """H2 VQE experiment.
 
-H2 / STO-3G is a 4-qubit / 3-parameter UCCSD problem. It converges to chemical
-accuracy in well under a second on either backend. We use it both as the
-"hello world" of the project and as the CI smoke test that proves the CPU
-path is healthy.
+H2 / STO-3G is a 4-qubit / 3-parameter UCCSD problem. It converges to
+chemical accuracy in seconds to tens of seconds on either backend and
+serves as both the "hello world" of the project and the CI smoke test
+that proves the CPU path is healthy.
 """
 
 from __future__ import annotations

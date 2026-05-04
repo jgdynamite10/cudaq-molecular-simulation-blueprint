@@ -218,9 +218,11 @@ This is the regime where the GPU pays its own freight. The 12-qubit
 statevector is 4096 complex amplitudes per evaluation, the Hamiltonian
 has hundreds of Pauli terms, and each function evaluation is doing
 real work that benefits from the parallelism. The Blackwell's 96 GB of
-VRAM is barely touched here &mdash; but it's the thing that makes the
-next jumps (16, 18, 20-qubit active spaces with bigger basis sets)
-tractable on a single card.
+VRAM is barely touched here, which is why this benchmark should be read
+as a disciplined baseline rather than a scale-limit test. The value of
+this run is not that it exhausts the GPU; the value is that it shows
+where the GPU begins to separate from CPU on the same hybrid
+quantum-classical workflow.
 
 ### Why multi-seed mattered
 
@@ -261,12 +263,11 @@ all of the FCI correlation. The gap is optimizer / over-parametrization
 residual: the LiH ansatz currently instantiates 92 UCCSD parameters on
 a 12-qubit kernel even though the active-space Hamiltonian has support
 on only 5 active orbitals, which leaves COBYLA optimizing in a much
-larger parameter space than the problem needs. Closing the remaining
-gap is a question of either narrowing the ansatz to match the active
-space, or replacing COBYLA with a gradient-based optimizer (L-BFGS-B
-with parameter-shift gradients), or simply running longer. None of
-those is a vendor problem; they are engineering choices the project
-will revisit in a follow-up post.
+larger parameter space than the problem needs. The remaining gap should
+be read as part of the benchmark context, not as a failure of the GPU
+result. The CPU and GPU runs agree on the optimization behavior; the
+GPU simply gets through the same work faster. That is the
+infrastructure point this post is making.
 
 ---
 
@@ -375,6 +376,13 @@ draw that line for a public companion site.
 
 ## Reproduce it yourself
 
+This project is meant to be inspected and reproduced. The
+[public UI](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/)
+is a read-only static snapshot hosted from Akamai Object Storage. If
+you clone the repository and run the container locally, the local
+developer UI is served from your own machine at
+`http://localhost:8000`.
+
 CPU path, runs anywhere with Docker (~17 seconds for H<sub>2</sub>):
 
 ```bash
@@ -382,7 +390,7 @@ git clone https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint.git
 cd cudaq-molecular-simulation-blueprint
 make container-build
 make container-run-cpu
-make serve   # local UI at http://localhost:8000
+make serve   # serves the UI on your own machine at http://localhost:8000
 ```
 
 GPU path on Akamai Cloud (Blackwell SKU is feature-gated; talk to your
@@ -423,31 +431,34 @@ run.
 
 ---
 
-## What's next
+## How to extend this work
 
-Three things I would do before scaling these numbers up in a
-follow-up post:
+This post is intentionally narrow: one reproducible hybrid
+quantum-classical workflow, two molecules, one validated Blackwell
+host, multiple seeds, and published benchmark artifacts.
 
-- **Optimizer + ansatz upgrade.** The 1-of-3 LiH local minimum and the
-  ~6 mHa gap on the converged seeds are both fixable by replacing
-  COBYLA with L-BFGS-B and parameter-shift gradients, and by narrowing
-  the ansatz so it instantiates the right number of UCCSD parameters
-  for the (2e, 5o) active space rather than the full molecule. Both
-  swaps are recipe changes; the rest of the pipeline does not move.
-- **Bigger active spaces.** The same 96 GB Blackwell that yawned
-  through 12 qubits will hold 28&ndash;30 qubit statevectors
-  comfortably. That is the regime where exact diagonalization on a CPU
-  stops being practical, so it is the natural next data point.
-- **Multi-GPU.** Akamai's `g3-gpu-rtxpro6000-blackwell-2` SKU has two
-  cards; CUDA-Q's `nvidia-mgpu` target slices the statevector across
-  them. The current comparisons were held to a single card on purpose
-  &mdash; the next data point goes the other way.
+There are several ways the artifact could be extended by others:
 
-What is intentionally not on this list: a quantum-advantage claim, a
-cross-cloud benchmark, or an orchestration-on-Kubernetes story. Each
-of those is a separate piece of work, with its own scope, audience,
-and timing, and folding any of them into this post would dilute the
-result.
+- **Different optimizers or ansatz choices.** The LiH result shows that
+  optimizer initialization matters. A reader could experiment with
+  different optimizer strategies or ansatz configurations while keeping
+  the same benchmark harness.
+- **Different molecule sizes or active spaces.** This benchmark does
+  not claim to find the scale limit of Blackwell. It establishes a
+  measured baseline that others can extend with larger chemistry
+  problems.
+- **Different GPU configurations.** The current published result is
+  single-GPU. Multi-GPU would be a separate benchmark with its own
+  measurement contract.
+- **Different infrastructure targets.** The application core is
+  provider-agnostic. Akamai Cloud is the validated path in this post,
+  but the containerized workload can be evaluated on any compatible GPU
+  host.
+
+Those are extensions, not prerequisites for the current result. The
+point of this post is the artifact as it stands today: a reproducible,
+measured, end-to-end demonstration of how GPUs already matter to
+practical quantum workflow development before QPUs enter the picture.
 
 ---
 
@@ -475,11 +486,8 @@ result.
 ## Links
 
 - Repository: <https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint>
-- Documentation site: <https://jgdynamite.github.io/cudaq-molecular-simulation-blueprint/>
 - Live UI snapshot: <https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/>
-- v0.1.0 release (with bench tarball + checksum):
-  <https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/releases/tag/v0.1.0>
 - Container image: `ghcr.io/jgdynamite/cudaq-molecular-simulation-blueprint:v0.1.0`
 - CUDA-Q docs: <https://nvidia.github.io/cuda-quantum/>
 - cuQuantum SDK: <https://developer.nvidia.com/cuquantum-sdk>
-- Akamai Cloud GPU SKUs: <https://www.linode.com/products/gpu/>
+- Akamai Cloud GPU SKUs: <https://www.linode.com/pricing/#compute-gpu>

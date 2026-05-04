@@ -11,41 +11,80 @@
 
 ---
 
-## The hybrid reality of quantum development today
+## Why this work, and why now
 
-There's a comfortable narrative about quantum computing that goes like this:
-the machines are coming, we'll port our workloads when they arrive, and
-in the meantime our job is to wait for the hardware to mature. That story
-is wrong in two interesting ways.
+Most organizations will encounter quantum computing for the first time
+through their classical infrastructure, not by pointing a workload at a
+QPU. The near-term loop &mdash; model a system, build a circuit, optimize
+parameters, evaluate the result against a Hamiltonian many thousands of
+times &mdash; is overwhelmingly hybrid CPU + GPU work today. A QPU
+becomes one execution target eventually; classical accelerators are the
+substrate now.
 
-First, the workflow that practitioners actually run today is hybrid:
-classical CPUs orchestrate, classical GPUs simulate, and a QPU is one
-optional execution target among several. The same Python you'd write to
-target a real QPU runs on a CPU statevector or a GPU statevector with a
-single argument change. Most of the development cycle for a near-term
-quantum algorithm happens against simulators long before any QPU time is
-booked.
+That made me want to see the workflow concretely &mdash; not on a slide,
+but provisioned, run, captured, and torn down on infrastructure I can
+hand to anyone else. The companion repository,
+[`cudaq-molecular-simulation-blueprint`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint),
+is the result: a small reference implementation of the variational
+quantum eigensolver (VQE) for two textbook molecules, built on NVIDIA's
+[CUDA-Q](https://nvidia.github.io/cuda-quantum/) and
+[cuQuantum](https://developer.nvidia.com/cuquantum-sdk)'s `cuStateVec`,
+validated end-to-end on Akamai Cloud RTX PRO 6000 Blackwell GPUs.
 
-Second, the simulators that matter aren't toy ones. They're built on
-the same vendor stack that makes ML competitive on big GPUs: NVIDIA's
-[CUDA-Q](https://nvidia.github.io/cuda-quantum/) for the language and
-runtime, [cuQuantum](https://developer.nvidia.com/cuquantum-sdk)'s
-`cuStateVec` for the statevector kernels. CUDA-Q's `nvidia-fp64` target
+This post is meant as a field note. Where do current-generation GPUs
+help the hybrid quantum workflow, where don't they, and how do you
+evaluate that question for your own organization without leaning on
+vendor narrative? The practical value in this space starts with
+experimentation, validation, and shortening time-to-decision &mdash;
+long before any QPU hours are booked. CUDA-Q's `nvidia-fp64` target
 runs the whole VQE loop &mdash; circuit construction, expectation
-evaluation, parameter update &mdash; on the GPU with the optimizer on the
-CPU. You don't write any CUDA. You write quantum kernels.
+evaluation, parameter update &mdash; on the GPU with the optimizer on
+the CPU; you don't write any CUDA, you write quantum kernels in
+CUDA-Q's Python frontend and pick a target.
 
-So if your reaction to the headline "we should buy a Blackwell to run
-quantum" is "what, why?", this post is for you.
+---
+
+## Why ITDMs should care
+
+Quantum computing tends to enter executive conversations as a
+future-tense topic. The near-term reality is more useful and more
+mundane: the workflow is already running, on classical infrastructure,
+mostly on GPUs that organizations are already provisioning for AI
+training and inference.
+
+Three takeaways for someone evaluating where this fits in an
+infrastructure portfolio:
+
+- **GPU optionality extends beyond AI inference.** The same
+  Blackwell-class accelerators that drive ML serving today are the
+  simulation substrate for hybrid quantum algorithms. That is worth
+  knowing when sizing capacity, planning utilization, or framing the
+  return on accelerator investment.
+- **Evidence over narrative, by construction.** The repository is
+  small, but it ships every artifact: host fingerprint, full
+  convergence traces, RNG seeds, container digest, git SHA, and
+  multi-seed wall-time measurements with stderr. That posture &mdash;
+  publish what you ran, on what hardware, with what variance &mdash;
+  is the way to evaluate emerging accelerated workloads responsibly,
+  and it generalizes well past quantum.
+- **A technical infrastructure thesis, not a platform claim.** The
+  takeaway here is that Blackwell-class GPUs are a viable platform
+  for the hybrid quantum workloads available today, and Akamai Cloud
+  is one validated path to running them. That is a technical thesis
+  with reproducible evidence behind it. It is not a quantum-advantage
+  claim, and it is not a positioning of Akamai as a dedicated quantum
+  cloud.
+
+The rest of this post walks through the experiment that supports those
+takeaways and the places where the data complicated my own thinking.
 
 ---
 
 ## The setup: H2 and LiH on a real Blackwell
 
-To make this concrete we built
-[`cudaq-molecular-simulation-blueprint`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint),
-a small reference implementation of the variational quantum eigensolver
-(VQE) for two textbook molecules:
+The blueprint targets two textbook molecules, picked to bracket the
+regime where a small statevector simulation transitions from
+CPU-dominated to GPU-dominated work:
 
 - **H<sub>2</sub>** at 0.74 &Aring; bond length, sto-3g basis, 4 qubits,
   3 UCCSD parameters. Maps to a small Hamiltonian where everything fits
@@ -102,26 +141,27 @@ in the repo. Headline aggregates:
 
 Two stories show up in the data, and they both matter.
 
-### Small problem: GPU is no longer faster (and that's fine)
+### Small problem: the GPU is not always the right tool
 
 For a 4-qubit Hamiltonian the CPU statevector backend
 (`qpp-cpu`, OpenMP-parallel, 16 cores) finished H<sub>2</sub> in
 16.87 &plusmn; 0.83 s. The GPU FP64 path took 17.65 &plusmn; 1.08 s
 &mdash; **0.96&times;** of CPU, well within stderr. The FP32 GPU path
-finished in 12.98 &plusmn; 0.39 s for a 1.30&times; speedup; less
-precision overhead pays off on a 16-amplitude statevector.
+finished in 12.98 &plusmn; 0.39 s for a 1.30&times; speedup; the
+lighter precision overhead pays off on a 16-amplitude statevector.
 
-The takeaway with multi-seed visibility is sharper than the v0.1.0
-single-seed cut allowed: at 4 qubits, the host&hairsp;-&hairsp;device
-transfer and kernel-launch overhead is *enough by itself* to make a
-top-of-line Blackwell trail a 16-core CPU. CUDA-Q is doing everything
-correctly &mdash; the GPU just doesn't have enough actual work to chew
-on to amortize its setup tax. This is the under-celebrated reality of
-GPU acceleration in any domain: **there's a problem-size threshold
-below which the device is the wrong tool**, and pretending otherwise
-produces cargo-cult benchmarking.
+Multi-seed visibility makes a useful observation precise: at 4 qubits,
+host&hairsp;-&hairsp;device transfer and kernel-launch overhead is
+enough by itself for a top-of-line Blackwell to trail a 16-core CPU.
+CUDA-Q is doing the right thing; the GPU simply does not have enough
+actual work on a 16-amplitude statevector to amortize its setup cost.
+The general form of this finding is what matters: **GPU acceleration
+has a problem-size threshold below which the device is overhead, not
+acceleration.** Choosing the right tool for the size of the problem is
+part of the engineering work, and reporting both regimes honestly is
+part of evaluating the workload responsibly.
 
-### Bigger problem: GPU wins by 1.665&times; with tight error bars
+### Larger problem: GPU is 1.665&times; faster, with tight error bars
 
 LiH on a 12-qubit, 92-parameter UCCSD ansatz tells a different story.
 Both backends ran to the 1500-iteration COBYLA cap. The wall-time gap
@@ -148,16 +188,20 @@ VRAM is barely touched here &mdash; but it's the thing that makes the
 next jumps (16, 18, 20-qubit active spaces with bigger basis sets)
 tractable on a single card.
 
-### Why multi-seed actually changed our mind
+### Why multi-seed actually changed my read of the data
 
 The v0.1.0 single-seed cut quoted a 1.71&times; LiH speedup on a 300-
-iteration COBYLA cap. That number turns out to be honest *and*
-incomplete. Looking at the trace inspection on the v0.1.0 manifest,
-COBYLA was still descending steadily at iter 300 (the last quarter of
-that run dropped 0.048 Ha by itself), so the +0.283 Ha residual error
+iteration COBYLA cap. That measurement was honest, but it was also
+incomplete in two specific ways, and walking through them is the heart
+of why multi-seed reruns matter for any workload like this.
+
+Trace inspection on the v0.1.0 manifest showed COBYLA was still
+descending steadily at iter 300 &mdash; the last quarter of that run
+dropped 0.048 Ha by itself &mdash; so the +0.283 Ha residual error
 versus FCI was *not enough iterations*, not *stuck in a local
-minimum*. We bumped LiH `--max-iterations` from 300 to 1500 and re-ran
-with three seeds:
+minimum*. Bumping LiH `--max-iterations` from 300 to 1500 and re-running
+with three seeds turned a single anecdotal data point into something
+with structure:
 
 - 2 of 3 seeds (42, 43) converged to within 1.1 mHa of each other,
   landing at -7.875 to -7.876 Ha. UCCSD with single and double
@@ -166,56 +210,61 @@ with three seeds:
 - 1 of 3 seeds (44) hit a different local minimum at -7.756 Ha, about
   120 mHa above the converged answer.
 
-That third seed is the *real* signal multi-seed buys you. UCCSD with
-COBYLA is sensitive to initialization, and 1-of-3 hits a basin you
-don't want. A blog post that quoted only seed=42 would have been
-misleading by omission. The variance is real, the median is honest,
-and now the 1.665&times; speedup carries credible error bars.
+That third seed is the real signal multi-seed buys you. UCCSD with
+COBYLA is sensitive to initialization, and 1-in-3 lands in a basin you
+do not want. A version of this post that quoted only seed 42 would
+have given a tidier picture than the workload actually has. The
+variance is real, the median is honest, and the 1.665&times; speedup
+now carries credible error bars rather than a single observation that
+happened to land where I hoped.
 
-The remaining ~6&ndash;7 mHa gap between our converged seeds and the
+The remaining ~6&ndash;7 mHa gap between the converged seeds and the
 *full* FCI energy of -7.882362 Ha is the active-space frozen-core
-error, not optimizer error. Closing it requires a bigger active space
+error, not optimizer error. Closing it calls for a bigger active space
 or a richer basis, not a better optimizer.
 
 ---
 
-## What this teaches
+## What this run teaches
 
 A few takeaways that generalize beyond this specific workload.
 
-**1. Quantum development is hybrid CPU + GPU + (sometimes) QPU, not
-QPU-or-bust.** If your platform story for quantum tomorrow involves
-ignoring the GPU layer today, you're going to have to re-platform
-twice: once to add GPU acceleration, once again to add a QPU
-execution target. Building the hybrid runtime first is the cheaper
-path.
+**1. Quantum development today is hybrid by default.** The pipeline
+that will eventually target a real QPU is the same pipeline that runs
+on a CPU statevector or a GPU statevector now, with one configuration
+value choosing the execution target. Standing up the hybrid runtime
+first is the more economical path to readiness; it lets the QPU
+column be added when QPUs reach an interesting working point, rather
+than as a re-platforming exercise.
 
-**2. There's a problem-size threshold for GPU advantage.** It's not
-where the marketing decks suggest. Below it, your GPU is a tax. Above
-it, the GPU pays for itself in wall time and unlocks problem sizes a
-CPU can't touch at all. Knowing where the threshold is &mdash; for your
+**2. Problem size, not vendor narrative, decides whether the GPU
+helps.** Below the threshold the GPU is overhead; above it, the GPU
+pays for itself in wall time and unlocks problem sizes a CPU cannot
+practically reach. Knowing where the threshold is &mdash; for your
 specific Hamiltonian shape, your specific ansatz, your specific
-optimizer &mdash; is the engineering work. We've published two data
-points so others can extend the curve.
+optimizer &mdash; is the engineering work. The two data points
+published here are intended as a starting curve others can extend.
 
-**3. Reproducibility is a feature, not a footnote.** Every run in this
-project captures CUDA-Q version, GPU model, driver version, CUDA
-version, OS, container digest, git SHA, and seed. The bench tarball
-is attached to the GitHub release with a SHA256. Anyone can re-run
-this on their own Blackwell, on their own CPU, on their own laptop,
-on their own cloud. That's the only way "X is N times faster than
-Y" claims become useful.
+**3. Reproducibility belongs in the design, not the appendix.** Every
+run in this project captures CUDA-Q version, GPU model, driver
+version, CUDA version, OS, container digest, git SHA, and seed. The
+bench tarball is attached to the GitHub release with a SHA256. Anyone
+can re-run this on their own Blackwell, on their own CPU, on their
+own laptop, on their own cloud. That kind of provenance is what turns
+an "X is N times faster than Y" anecdote into something an
+infrastructure team can act on.
 
-**4. A blog companion can be a real artifact.** The
+**4. The artifact and the post belong together.** The
 [live UI](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/)
-isn't a screenshot. It's the actual Jinja2/HTMX UI rendered as a
+is not a screenshot. It is the actual Jinja2/HTMX UI rendered as a
 static bundle and served from Akamai Object Storage. Visitors see the
 real Blackwell host fingerprint, drill into the convergence chart of
 each individual run, and read the same comparison report the CLI
-spits out. The "Run an experiment" form is intentionally inert in
-static mode &mdash; clicking submit redirects you to the GitHub repo,
-because running cudaq from a public web bucket without auth is
-exactly the kind of thing that makes security reviewers cry.
+produces. The "Run an experiment" form is intentionally inert in
+static mode &mdash; clicking submit redirects to the GitHub repo.
+Public read-only artifacts are easy to reason about; live execution
+belongs behind authentication, which is the appropriate place to
+draw that line for a public companion site.
 
 ---
 
@@ -266,8 +315,8 @@ run.
 
 ## What's next
 
-Three things we'd do before scaling these numbers up in a follow-up
-post:
+Three things I would do before scaling these numbers up in a
+follow-up post:
 
 - **Optimizer + ansatz upgrade.** The 1-of-3 LiH local minimum is
   fixable by replacing COBYLA with L-BFGS-B and parameter-shift
@@ -280,12 +329,14 @@ post:
   practical, so it's the natural next data point.
 - **Multi-GPU.** Akamai's `g3-gpu-rtxpro6000-blackwell-2` SKU has two
   cards; CUDA-Q's `nvidia-mgpu` target slices the statevector across
-  them. We held the v0.1.0/v0.1.1 comparison to a single card
-  intentionally; the next data point goes the other way.
+  them. The current comparisons were held to a single card on purpose
+  &mdash; the next data point goes the other way.
 
-What's *not* on the list: a quantum-advantage claim, a cross-cloud
-benchmark, or a Kubernetes story. Those are different posts, with
-different threat models, on different timelines.
+What is intentionally not on this list: a quantum-advantage claim, a
+cross-cloud benchmark, or an orchestration-on-Kubernetes story. Each
+of those is a separate piece of work, with its own scope, audience,
+and timing, and folding any of them into this post would dilute the
+result.
 
 ---
 
@@ -303,10 +354,10 @@ different threat models, on different timelines.
   deployment lives entirely under `infra/`. Lift the Docker image
   anywhere that has Blackwell + the NVIDIA Container Toolkit.
 - **The QPU column is empty by design.** Adding a QPU target is one
-  CUDA-Q `set_target()` call away; we didn't ship it because it would
-  shift the discussion off-topic. The point of this post is that the
-  hybrid workflow is already worth standing up before the QPU column
-  has a number in it.
+  CUDA-Q `set_target()` call away; I left it out so the post stays
+  focused on the part of the workflow that runs on hardware available
+  to anyone today. The point is that the hybrid workflow is already
+  worth standing up before the QPU column has a number in it.
 
 ---
 

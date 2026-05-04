@@ -31,6 +31,22 @@ a dedicated quantum cloud, and **not** a cross-cloud benchmark. It **is** a
 portable, public, Akamai-validated Blackwell-era reference implementation
 for molecular simulation that you can read, run, and extend.
 
+### Why this matters to IT decision-makers
+
+This repository is a small, end-to-end example of how to evaluate an
+emerging accelerated workload responsibly &mdash; published code, published
+manifests, multi-seed measurements with stderr, and a reproducible hardware
+path on Akamai Cloud Blackwell infrastructure. It also illustrates that
+today's GPUs already have a role beyond AI inference and training: they
+are the computational substrate the hybrid quantum workflow runs on right
+now, well before any QPU column has a useful number in it.
+
+The current evidence supports a **technical infrastructure thesis**
+(Blackwell-class GPUs are a viable platform for the hybrid quantum
+workloads available today, and Akamai Cloud is one validated path to
+running them), not a broader competitive platform claim about quantum
+computing in general.
+
 ---
 
 ## Validated on Blackwell (Jakarta, multi-seed re-bench 2026-05-04)
